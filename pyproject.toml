@@ -1,0 +1,44 @@
+[project]
+name = "sugar-data-processing"
+version = "0.1.0"
+description = "Statistical analysis pipeline for Sugar Sugar study results (H1–H5 per study design)."
+readme = "README.md"
+authors = [
+    { name = "Livia Zaharia", email = "liviazaharia2020@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "eliot>=1.18.0",
+    "matplotlib>=3.11.1",
+    "numpy>=2.5.1",
+    "pandas>=2.2.0",
+    "polars>=1.42.1",
+    "pyarrow>=25.0.0",
+    "pycomfort>=0.0.18",
+    "rich>=15.0.0",
+    "scipy>=1.18.0",
+    "seaborn>=0.13.2",
+    "typer>=0.27.0",
+]
+
+[project.scripts]
+sugar-data-processing = "sugar_data_processing:main"
+sdp = "sugar_data_processing:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

@@ -1,0 +1,34 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+
+# Local study exports (may contain participant contact fields)
+data/raw/*
+!data/raw/.gitkeep
+
+# Generated artefacts
+output/reports/*
+!output/reports/.gitkeep
+output/figures/*
+!output/figures/.gitkeep
+output/real_preview/
+data/processed/*
+!data/processed/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Editor / OS
+.cursor/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.env
+*.log
