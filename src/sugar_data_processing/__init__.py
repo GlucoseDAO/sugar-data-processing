@@ -14,8 +14,16 @@ CLI entry points: ``sugar-data-processing`` / ``sdp``.
 
 from sugar_data_processing.cli import app
 from sugar_data_processing.pipeline import AnalysisResult, run_analysis
+from sugar_data_processing.runtime import AnalysisSession, ensure_package_importable, prepare_session
 
-__all__ = ["app", "run_analysis", "AnalysisResult"]
+__all__ = [
+    "app",
+    "run_analysis",
+    "AnalysisResult",
+    "AnalysisSession",
+    "ensure_package_importable",
+    "prepare_session",
+]
 
 
 def main() -> None:

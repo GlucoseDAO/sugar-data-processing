@@ -21,6 +21,8 @@ def test_full_pipeline_on_synthetic(tmp_path: Path) -> None:
     report = result.report_path.read_text(encoding="utf-8")
     assert "Diabetes status and prediction accuracy" in report
     assert "Own data vs generic example data" in report
+    assert "How to read this report" in report
+    assert "Quick glossary" in report
     assert "data:image/png;base64," in report
     assert (out / "figures" / "h1_mae_by_diabetes.png").exists()
     assert (out / "reports" / "figures" / "h1_mae_by_diabetes.png").exists()

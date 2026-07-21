@@ -48,4 +48,7 @@ MAE_IQR_OUTLIER_K: float = 1.5
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 DEFAULT_RAW_CSV: Path = REPO_ROOT / "data" / "raw" / "prediction_statistics.csv"
 DEFAULT_FIXTURE_CSV: Path = REPO_ROOT / "data" / "fixtures" / "synthetic_prediction_statistics.csv"
+# Single canonical output tree for CLI and notebook (reports always under output/reports)
 DEFAULT_OUTPUT_DIR: Path = REPO_ROOT / "output"
+DEFAULT_REPORTS_DIR: Path = DEFAULT_OUTPUT_DIR / "reports"
+DEFAULT_FIGURES_DIR: Path = DEFAULT_OUTPUT_DIR / "figures"

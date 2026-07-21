@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+import polars as pl
+
 
 class HypothesisInfo(TypedDict):
     code: str
@@ -124,3 +126,18 @@ def hypothesis_heading(key: str) -> str:
     """Section heading with code + plain title."""
     info = HYPOTHESES[key]
     return f"{info['code']} — {info['title']}"
+
+
+def hypotheses_table() -> pl.DataFrame:
+    """One-row-per-hypothesis table for notebooks and quick inspection."""
+    return pl.DataFrame(
+        [
+            {
+                "code": info["code"],
+                "title": info["title"],
+                "question": info["question"],
+                "section": info["section"],
+            }
+            for info in HYPOTHESES.values()
+        ]
+    )

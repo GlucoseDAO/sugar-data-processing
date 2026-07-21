@@ -4,7 +4,12 @@ H1–H5 hypothesis battery on person-level MAE. H6 is deferred until
 computational baselines exist in sugar-sugar.
 """
 
-from sugar_data_processing.statistics.catalog import HYPOTHESES, hypothesis_blurb, hypothesis_heading
+from sugar_data_processing.statistics.catalog import (
+    HYPOTHESES,
+    hypotheses_table,
+    hypothesis_blurb,
+    hypothesis_heading,
+)
 from sugar_data_processing.statistics.hypotheses import HypothesisSuite, run_all_hypotheses
 from sugar_data_processing.statistics.tests import (
     correlation_analysis,
@@ -14,6 +19,7 @@ from sugar_data_processing.statistics.tests import (
 
 __all__ = [
     "HYPOTHESES",
+    "hypotheses_table",
     "hypothesis_blurb",
     "hypothesis_heading",
     "HypothesisSuite",

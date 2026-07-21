@@ -13,8 +13,12 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
+from sugar_data_processing.output.narration import (
+    explain_hypothesis_result,
+    how_to_read_report,
+)
 from sugar_data_processing.output.plots import generate_all_figures
-from sugar_data_processing.statistics.catalog import HYPOTHESES, hypothesis_blurb, hypothesis_heading
+from sugar_data_processing.statistics.catalog import HYPOTHESES
 from sugar_data_processing.statistics.hypotheses import HypothesisSuite
 from sugar_data_processing.verification.anomalies import Anomaly
 from sugar_data_processing.verification.report import VerificationReport
@@ -115,37 +119,6 @@ def _embed_png(path: Path, caption: str) -> str:
     )
 
 
-def _fmt_result(result: dict[str, Any] | None) -> str:
-    if result is None:
-        return "_Not run / insufficient sample._"
-    lines = [
-        f"- **Test used:** `{result.get('test_used')}`",
-        f"- **n:** {_n_from_result(result)}",
-        f"- **Statistic:** {result.get('statistic'):.4g}"
-        if isinstance(result.get("statistic"), (int, float))
-        else f"- **Statistic:** {result.get('statistic')}",
-        f"- **p-value:** {result.get('p_value'):.4g}"
-        if isinstance(result.get("p_value"), (int, float))
-        else f"- **p-value:** {result.get('p_value')}",
-        f"- **Effect size ({result.get('effect_size_name')}):** "
-        f"{result.get('effect_size'):.3f}"
-        if isinstance(result.get("effect_size"), (int, float))
-        else "",
-        f"- **Significant (α={result.get('alpha')}):** "
-        f"{'yes' if result.get('significant') else 'no'}",
-        f"- **Interpretation:** {result.get('interpretation')}",
-    ]
-    return "\n".join(line for line in lines if line)
-
-
-def _n_from_result(result: dict[str, Any]) -> str:
-    if "n" in result:
-        return str(result["n"])
-    if "n_a" in result:
-        return f"{result['n_a']} vs {result['n_b']}"
-    return "?"
-
-
 def _issue_table(issues: list[Anomaly], limit: int = 80) -> str:
     lines: list[str] = []
     for a in issues[:limit]:
@@ -162,16 +135,11 @@ def _hypothesis_section(
     result: dict[str, Any] | None,
     figure_blocks: list[str],
 ) -> str:
-    blurb = hypothesis_blurb(key)
-    heading = hypothesis_heading(key)
     figures = "\n\n".join(figure_blocks)
-    return f"""### {heading}
+    narrative = explain_hypothesis_result(key, result)
+    return f"""{narrative}
 
-{blurb}
-
-**Results**
-
-{_fmt_result(result)}
+**Figure(s)**
 
 {figures}
 """
@@ -203,12 +171,12 @@ def _render_markdown(
 
     notes_md = "\n".join(f"- {n}" for n in suite.notes) if suite.notes else "- None"
     schema_status = "PASSED" if verification.schema_ok else "FAILED"
-    h6 = HYPOTHESES["h6"]
 
     catalog_rows = "\n".join(
         f"| {info['code']} | {info['title']} | {info['question']} |"
         for info in HYPOTHESES.values()
     )
+    reading_guide = how_to_read_report()
 
     return f"""# Sugar Sugar Study Analysis Report
 
@@ -218,44 +186,48 @@ Source: `{source_csv}`
 This report follows **Section 7 (Statistical Analysis Plan)** of
 *Human Prediction of Next-Hour Glucose from Prior CGM Context*.
 
-**MAE** = mean absolute error of next-hour glucose predictions (mg/dL).  
-**Person-level MAE** = mean of a participant's round MAEs (one score per person).
+It is written so a student can follow the pipeline without reading the source code:
+what was measured, who was included, what each test asked, and what the numbers mean.
 
-## Hypothesis key
+{reading_guide}
 
-| Code | Title | Question in plain language |
+## Hypothesis key (plain language)
+
+| Code | Title | Question |
 | --- | --- | --- |
 {catalog_rows}
 
 ## 1. Cohort snapshot
 
-How many sessions and people entered the analysis, and what is the overall
-accuracy distribution?
+**Goal of this section:** see how many sessions and people entered the analysis,
+and what overall prediction accuracy looks like.
 
-| Metric | Value |
-| --- | ---: |
-| Raw runs (rows) | {runs.height} |
-| Unique participants (`study_id`) | {participants.height} |
-| Eligible for primary analyses (≥6 generic segments) | {n_primary} |
-| Eligible for own-vs-generic paired test (≥6 generic **and** ≥6 own) | {n_h5} |
-| Mean person MAE (mg/dL) | {benchmarks.human_mean_mae:.2f} |
-| Median person MAE (mg/dL) | {benchmarks.human_median_mae:.2f} |
-| SD person MAE (mg/dL) | {benchmarks.human_sd_mae:.2f} |
+| Metric | Value | What it means |
+| --- | ---: | --- |
+| Raw runs (rows) | {runs.height} | Completed app sessions in the export |
+| Unique participants | {participants.height} | Distinct people (`study_id`) |
+| Eligible for primary analyses | {n_primary} | ≥6 generic segments (used for H1–H4) |
+| Eligible for own-vs-generic test | {n_h5} | ≥6 generic **and** ≥6 own (used for H5) |
+| Mean person MAE (mg/dL) | {benchmarks.human_mean_mae:.2f} | Average accuracy (lower is better) |
+| Median person MAE (mg/dL) | {benchmarks.human_median_mae:.2f} | Typical person (robust to outliers) |
+| SD person MAE (mg/dL) | {benchmarks.human_sd_mae:.2f} | Spread of accuracy across people |
 
 {img("mae_distribution", "Distribution of per-person MAE (mg/dL)")}
 
 ## 2. Analysis population rules (§7.2)
 
-- **Primary analyses (diabetes status, CGM use, duration correlations):**
-  participants with ≥6 analyzable **generic** segments.
-- **Own-data analyses:** participants with ≥6 **own-data** segments.
-- **Own-vs-generic paired analysis:** participants meeting both thresholds.
-- **Person-level MAE:** mean of round MAEs so repeated rounds from the same
-  participant do not inflate degrees of freedom.
+**Why this matters:** statistical tests only include people with enough completed
+segments. Otherwise short incomplete sessions would dominate the results.
+
+- **Primary analyses (H1–H4):** ≥6 analyzable **generic** segments.
+- **Own-data analyses:** ≥6 **own-data** segments.
+- **Own-vs-generic paired analysis (H5):** both thresholds.
+- **Person-level MAE:** mean of round MAEs so one busy participant cannot inflate
+  the sample size by playing many rounds.
 
 ## 3. Primary hypotheses
 
-These compare independent groups on person-level MAE.
+**What these ask:** do two groups of people differ in prediction accuracy?
 
 {_hypothesis_section(
     "h1",
@@ -271,7 +243,8 @@ These compare independent groups on person-level MAE.
 
 ## 4. Secondary hypotheses
 
-These test experience correlations and within-person own-vs-generic accuracy.
+**What these ask:** does longer experience help, and is accuracy better on own data
+than on generic example data?
 
 {_hypothesis_section(
     "h3",
@@ -310,30 +283,28 @@ These test experience correlations and within-person own-vs-generic accuracy.
     ],
 )}
 
-### {hypothesis_heading("h6")}
-
-{hypothesis_blurb("h6")}
-
-**Results**
-
-_{h6['method']}_
+{explain_hypothesis_result("h6", hyp.get("h6"))}
 
 ## 5. Literature / GlucoBench context (§7.5)
 
-How does the human cohort's MAE sit relative to published 60-minute model bands?
+**Goal of this section:** place human MAE next to published 60-minute model bands.
+This is contextual comparison, not the deferred formal H6 baseline test.
 
 {benchmarks.narrative}
 
-| Band | Range (mg/dL) | % of humans inside |
-| --- | --- | ---: |
-| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% |
-| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% |
-| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% |
-| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% |
+| Band | Range (mg/dL) | % of humans inside | How to read it |
+| --- | --- | ---: | --- |
+| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% | Typical simple forecasting models |
+| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% | Typical deep-learning reports |
+| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% | Personalized-model band |
+| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% | Better than the simple-band floor |
 
 {img("benchmark_bands", "Human MAE density vs published simple and deep-learning bands")}
 
 ## 6. Data verification
+
+**Goal of this section:** show whether the input data looked structurally valid and
+whether any demographic / metric oddities need review.
 
 Schema checks: **{schema_status}**  
 Total issues: **{len(all_issues)}** ({verification.n_high} high, {verification.n_medium} medium)  
@@ -357,7 +328,7 @@ Total issues: **{len(all_issues)}** ({verification.n_high} high, {verification.n
 
 ## 8. Machine-readable artefacts
 
-- `study_analysis_report.json` — hypothesis payloads + catalog
+- `study_analysis_report.json` — full hypothesis payloads + catalog
 - `figures/` — PNG copies of every plot embedded above
 - processed participant / run tables under `processed/` (or repo `data/processed/`)
 """

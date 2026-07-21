@@ -67,14 +67,14 @@ src/sugar_data_processing/
   pipeline.py      # run_analysis() wires stages 1→5
   cli.py           # Typer entry point
 notebooks/
-  study_analysis.ipynb   # same modules, step-by-step
+  study_analysis.ipynb   # thin walkthrough over the library (same paths as CLI)
 data/
   raw/             # drop real prediction_statistics.csv here (gitignored)
   fixtures/        # committed synthetic demo data
   processed/       # parquet/csv intermediates (written by output stage)
 output/
   figures/         # PNGs
-  reports/         # study_analysis_report.md + .json
+  reports/         # study_analysis_report.md + .json (+ reports/figures/)
 tests/             # pytest (real synthetic data, no mocks)
 docs/
   analysis-plan.md # study design §7 → module map
@@ -132,7 +132,7 @@ Resolution order for `analyze` without `--csv` / `--fixture`:
 1. `data/raw/prediction_statistics.csv` if present
 2. else fixture (with a yellow warning)
 
-### Jupyter (same library modules)
+### Jupyter (same library modules and same report folder)
 
 ```bash
 uv sync --group dev
@@ -140,8 +140,10 @@ uv run sugar-data-processing make-fixture
 uv run jupyter notebook notebooks/study_analysis.ipynb
 ```
 
-The notebook calls `gathering` → `verification` → `statistics` → `comparison` →
-`output` in separate cells (not a second implementation).
+Select the `sugar-data-processing (.venv)` kernel. The notebook only calls library
+APIs (`prepare_session`, gathering, verification, statistics, comparison, output).
+It writes to the same place as the CLI: `output/reports/` (no notebook-specific
+report directory).
 
 ### Library import
 
