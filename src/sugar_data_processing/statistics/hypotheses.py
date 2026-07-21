@@ -13,7 +13,7 @@ import numpy as np
 import polars as pl
 from eliot import start_action
 
-from sugar_data_processing.extraction.participants import (
+from sugar_data_processing.gathering.participants import (
     h5_paired_population,
     primary_analysis_population,
 )

@@ -6,7 +6,7 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.config import MIN_GENERIC_SEGMENTS, MIN_OWN_SEGMENTS
-from sugar_data_processing.extraction.rounds import build_round_table
+from sugar_data_processing.gathering.rounds import build_round_table
 
 
 def _latest_runs(runs: pl.DataFrame) -> pl.DataFrame:
@@ -36,7 +36,7 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
     accuracy score per person). Separate scores are kept for generic vs own
     data so H5 can use a within-person paired design.
     """
-    with start_action(action_type="extraction.build_participant_table", n_runs=runs.height) as action:
+    with start_action(action_type="gathering.build_participant_table", n_runs=runs.height) as action:
         latest = _latest_runs(runs)
         rounds = build_round_table(latest)
 

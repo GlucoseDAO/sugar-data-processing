@@ -37,7 +37,7 @@ def _iqr_bounds(values: np.ndarray, k: float = MAE_IQR_OUTLIER_K) -> tuple[float
 
 def detect_anomalies(runs: pl.DataFrame, participants: pl.DataFrame) -> list[Anomaly]:
     """Return human-readable anomalies for the markdown report."""
-    with start_action(action_type="comparison.detect_anomalies") as action:
+    with start_action(action_type="verification.detect_anomalies") as action:
         anomalies: list[Anomaly] = []
 
         # Duplicate run_ids

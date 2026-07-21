@@ -1,17 +1,24 @@
-# Mapping: study design §7 → this repo
+# Mapping: study design §7 → this library
 
 Source document: `sugar-sugar/data/input/study_design/The study - technical Guidebook.md`
 
-| Study design section | Module |
+| Pipeline stage | Module | Study design |
+| --- | --- | --- |
+| 1. Data gathering | `gathering/` | Load export; §7.2 populations (`eligible_primary`, `eligible_own`, `eligible_h5`) |
+| 2. Data verification | `verification/` | Schema + demographic / metric quality flags |
+| 3. Statistical tests | `statistics/` | §7.3 H1–H2; §7.4 H3–H5 |
+| 4. Data comparison | `comparison/` | §7.5 literature / GlucoBench bands |
+| 5. Output | `output/` | Human-readable markdown + JSON + figures |
+
+| Study design section | Symbol |
 | --- | --- |
-| §7.2 Analysis populations | `extraction/participants.py` (`eligible_primary`, `eligible_own`, `eligible_h5`) |
-| §7.3 H1 / H2 | `statistics/hypotheses.py` + `statistics/tests.py` (`independent_group_comparison`) |
-| §7.4 H3 / H4 | `correlation_analysis` (+ linear vs log R²) |
-| §7.4 H5 | `paired_comparison` on generic − own MAE |
+| §7.2 Analysis populations | `gathering.participants` |
+| §7.3 H1 / H2 | `statistics.hypotheses` + `statistics.tests.independent_group_comparison` |
+| §7.4 H3 / H4 | `statistics.tests.correlation_analysis` |
+| §7.4 H5 | `statistics.tests.paired_comparison` |
 | §7.4 H6 | Deferred note in report only |
-| §7.5 Literature bands | `comparison/benchmarks.py` |
-| Data quality / anomalies | `comparison/anomalies.py` |
-| Human-readable deliverable | `output/report.py` + `output/plots.py` |
+| §7.5 Literature bands | `comparison.benchmarks` |
+| Data quality | `verification.schema` + `verification.anomalies` |
 
 ## Format conventions from sugar-sugar
 

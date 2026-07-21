@@ -1,0 +1,270 @@
+{
+  "generated_at": "2026-07-21 09:28 UTC",
+  "source_csv": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\data\\fixtures\\synthetic_prediction_statistics.csv",
+  "n_runs": 210,
+  "n_participants": 120,
+  "verification": {
+    "schema_ok": true,
+    "passed": true,
+    "n_runs": 210,
+    "n_participants": 120,
+    "n_schema_issues": 0,
+    "n_quality_flags": 5,
+    "n_high": 3,
+    "n_medium": 2,
+    "schema_issues": [],
+    "quality_flags": [
+      {
+        "study_id": "74a0db49-97c6-54a7-8f8f-a3b96a91ad30",
+        "category": "diabetes_duration_gt_age",
+        "severity": "high",
+        "detail": "diabetes_duration=21.91488714066286 > age=18.0"
+      },
+      {
+        "study_id": "27ba2f05-f7cb-5c3f-b6f2-075df79abf2c",
+        "category": "cgm_duration_gt_age",
+        "severity": "high",
+        "detail": "cgm_duration_years=58.0 > age=53.0"
+      },
+      {
+        "study_id": "27ba2f05-f7cb-5c3f-b6f2-075df79abf2c",
+        "category": "implausible_cgm_duration",
+        "severity": "high",
+        "detail": "cgm_duration_years=58.0 (plausible \u2264 30.0)"
+      },
+      {
+        "study_id": "daea1a90-f40c-5ac0-9663-6e8cabd3b0ba",
+        "category": "mae_iqr_outlier",
+        "severity": "medium",
+        "detail": "mae_primary=90.74 outside IQR fence [-0.53, 30.91]"
+      },
+      {
+        "study_id": "f02b2d28-7209-5349-b271-b5a9a4088c27",
+        "category": "mae_iqr_outlier",
+        "severity": "medium",
+        "detail": "mae_primary=33.51 outside IQR fence [-0.53, 30.91]"
+      }
+    ]
+  },
+  "hypotheses": {
+    "h1": {
+      "hypothesis": "H1",
+      "comparison": "PwD vs non-PwD",
+      "n_a": 60,
+      "n_b": 60,
+      "mean_a": 13.836000090942205,
+      "mean_b": 18.083310656920787,
+      "mean_diff": -4.247310565978582,
+      "normality_a": {
+        "group": "PwD",
+        "n": 60,
+        "statistic": 0.4976672761886644,
+        "p_value": 5.080347661325317e-13,
+        "is_normal": false
+      },
+      "normality_b": {
+        "group": "non-PwD",
+        "n": 60,
+        "statistic": 0.9822074560743337,
+        "p_value": 0.528692887661359,
+        "is_normal": true
+      },
+      "test_used": "mann_whitney_u",
+      "statistic": 815.0,
+      "p_value": 2.375190584490032e-07,
+      "effect_size_name": "rank_biserial",
+      "effect_size": 0.5472222222222223,
+      "alpha": 0.05,
+      "significant": true,
+      "interpretation": "Significant difference (p=2.375e-07, mann_whitney_u). Mean MAE PwD=13.84, non-PwD=18.08 mg/dL \u2192 PwD lower MAE (better)."
+    },
+    "h2": {
+      "hypothesis": "H2",
+      "comparison": "CGM users vs non-CGM",
+      "n_a": 80,
+      "n_b": 40,
+      "mean_a": 14.323462275688518,
+      "mean_b": 19.232041570417465,
+      "mean_diff": -4.908579294728947,
+      "normality_a": {
+        "group": "CGM users",
+        "n": 80,
+        "statistic": 0.5410008044465188,
+        "p_value": 2.020807711796338e-14,
+        "is_normal": false
+      },
+      "normality_b": {
+        "group": "non-CGM",
+        "n": 40,
+        "statistic": 0.9754833157749929,
+        "p_value": 0.5263414259912057,
+        "is_normal": true
+      },
+      "test_used": "mann_whitney_u",
+      "statistic": 670.0,
+      "p_value": 2.28464497001889e-07,
+      "effect_size_name": "rank_biserial",
+      "effect_size": 0.58125,
+      "alpha": 0.05,
+      "significant": true,
+      "interpretation": "Significant difference (p=2.285e-07, mann_whitney_u). Mean MAE CGM users=14.32, non-CGM=19.23 mg/dL \u2192 CGM users lower MAE (better)."
+    },
+    "h3": {
+      "hypothesis": "H3",
+      "predictor": "diabetes_duration_years",
+      "n": 60,
+      "normality_outcome": {
+        "group": "MAE",
+        "n": 60,
+        "statistic": 0.4976672761886644,
+        "p_value": 5.080347661325317e-13,
+        "is_normal": false
+      },
+      "test_used": "spearman",
+      "coefficient": -0.15809947207557656,
+      "p_value": 0.22763359356537263,
+      "log_model_r2": 0.002353993681462274,
+      "linear_model_r2": 0.0035115677991188754,
+      "alpha": 0.05,
+      "significant": false,
+      "interpretation": "Non-significant spearman correlation (\u03c1/r=-0.158, p=0.2276, n=60). Direction: negative (longer experience \u2192 lower MAE)."
+    },
+    "h4": {
+      "hypothesis": "H4",
+      "predictor": "cgm_duration_years",
+      "n": 80,
+      "normality_outcome": {
+        "group": "MAE",
+        "n": 80,
+        "statistic": 0.5410008044465188,
+        "p_value": 2.020807711796338e-14,
+        "is_normal": false
+      },
+      "test_used": "spearman",
+      "coefficient": -0.3184716361931552,
+      "p_value": 0.0039889813605069385,
+      "log_model_r2": 0.010196913502991678,
+      "linear_model_r2": 0.0037841225656463084,
+      "alpha": 0.05,
+      "significant": true,
+      "interpretation": "Significant spearman correlation (\u03c1/r=-0.318, p=0.003989, n=80). Direction: negative (longer experience \u2192 lower MAE)."
+    },
+    "h5": {
+      "hypothesis": "H5",
+      "comparison": "generic data vs own data",
+      "n": 90,
+      "mean_a": 15.114503833436887,
+      "mean_b": 12.641598537770193,
+      "mean_diff": 2.4729052956666973,
+      "normality_diff": {
+        "group": "difference",
+        "n": 90,
+        "statistic": 0.9872113231724431,
+        "p_value": 0.5292017027979466,
+        "is_normal": true
+      },
+      "test_used": "paired_t",
+      "statistic": 12.343704404833122,
+      "p_value": 5.518985688194552e-21,
+      "effect_size_name": "cohen_d_paired",
+      "effect_size": 1.3011406894375268,
+      "alpha": 0.05,
+      "significant": true,
+      "interpretation": "Significant paired difference (p=5.519e-21, paired_t). Mean generic data=15.11, own data=12.64 mg/dL (diff generic data\u2212own data=2.47). Lower MAE on: own data."
+    },
+    "h6": {
+      "status": "deferred",
+      "note": "H6 (human vs baseline models) is deferred per study design \u00a77.4 until persistence / linear-extrapolation / ARIMA baselines are available."
+    },
+    "notes": []
+  },
+  "hypothesis_catalog": {
+    "h1": {
+      "code": "H1",
+      "title": "Diabetes status and prediction accuracy",
+      "question": "Do people with diabetes (PwD) predict next-hour glucose more accurately than people without diabetes?",
+      "groups_or_predictors": "PwD vs non-PwD (`diabetic`)",
+      "outcome": "Person-level MAE in mg/dL (lower is better)",
+      "method": "Shapiro\u2013Wilk normality check, then independent t-test if normal, otherwise Mann\u2013Whitney U. \u03b1 = 0.05.",
+      "section": "\u00a77.3 primary"
+    },
+    "h2": {
+      "code": "H2",
+      "title": "CGM use and prediction accuracy",
+      "question": "Do continuous glucose monitor (CGM) users predict next-hour glucose more accurately than people who do not use CGM?",
+      "groups_or_predictors": "CGM users vs non-CGM (`uses_cgm`)",
+      "outcome": "Person-level MAE in mg/dL (lower is better)",
+      "method": "Same path as H1: Shapiro\u2013Wilk \u2192 independent t-test or Mann\u2013Whitney U. \u03b1 = 0.05.",
+      "section": "\u00a77.3 primary"
+    },
+    "h3": {
+      "code": "H3",
+      "title": "Diabetes duration and prediction accuracy",
+      "question": "Among people with diabetes, is longer diabetes duration associated with better (lower) prediction MAE?",
+      "groups_or_predictors": "Diabetes duration in years (PwD only)",
+      "outcome": "Person-level MAE in mg/dL",
+      "method": "Pearson correlation if assumptions hold, otherwise Spearman; plus exploratory linear vs log fits. \u03b1 = 0.05.",
+      "section": "\u00a77.4 secondary"
+    },
+    "h4": {
+      "code": "H4",
+      "title": "CGM experience and prediction accuracy",
+      "question": "Among CGM users, is longer CGM experience associated with better (lower) prediction MAE?",
+      "groups_or_predictors": "CGM experience in years (CGM users only)",
+      "outcome": "Person-level MAE in mg/dL",
+      "method": "Same approach as H3: Pearson or Spearman plus exploratory linear/log fits. \u03b1 = 0.05.",
+      "section": "\u00a77.4 secondary"
+    },
+    "h5": {
+      "code": "H5",
+      "title": "Own data vs generic example data",
+      "question": "Within the same person, is prediction more accurate on their own CGM segments than on generic/example segments?",
+      "groups_or_predictors": "Paired own-data MAE vs generic-data MAE",
+      "outcome": "Difference (generic MAE \u2212 own MAE); positive means better accuracy on own data",
+      "method": "Shapiro\u2013Wilk on paired differences \u2192 paired t-test or Wilcoxon signed-rank. \u03b1 = 0.05.",
+      "section": "\u00a77.4 secondary"
+    },
+    "h6": {
+      "code": "H6",
+      "title": "Humans vs computational baseline models",
+      "question": "How does human next-hour MAE compare with persistence, linear-extrapolation, and ARIMA baselines on the same segments?",
+      "groups_or_predictors": "Human MAE vs model MAE (same segments)",
+      "outcome": "Person- or segment-level MAE in mg/dL",
+      "method": "Deferred until baselines are implemented in sugar-sugar.",
+      "section": "\u00a77.4 deferred"
+    }
+  },
+  "benchmarks": {
+    "n": 120,
+    "human_mean_mae": 15.9596553739315,
+    "human_median_mae": 15.498091688662907,
+    "human_sd_mae": 8.938806173285824,
+    "pct_below_simple_baseline_low": 29.166666666666668,
+    "pct_inside_simple_baseline_band": 48.333333333333336,
+    "pct_inside_deep_learning_band": 39.166666666666664,
+    "pct_inside_personalized_band": 16.666666666666664,
+    "simple_baseline_mae_range": [
+      12.0,
+      20.0
+    ],
+    "deep_learning_mae_range": [
+      11.0,
+      17.0
+    ],
+    "personalized_mae_range": [
+      15.0,
+      17.0
+    ],
+    "narrative": "Human mean MAE is 16.0 mg/dL (median 15.5, SD 8.9, n=120), which sits inside the published simple-baseline band. Reference 60-min bands \u2014 simple/ARIMA 12\u201320, deep learning 11\u201317, personalized 15\u201317 mg/dL (study design \u00a77.5)."
+  },
+  "figures": {
+    "mae_by_diabetes": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h1_mae_by_diabetes.png",
+    "mae_by_cgm": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h2_mae_by_cgm.png",
+    "diabetes_duration_scatter": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h3_diabetes_duration_scatter.png",
+    "cgm_duration_scatter": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h4_cgm_duration_scatter.png",
+    "duration_bins": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h3_h4_duration_bins.png",
+    "own_vs_generic": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\h5_own_vs_generic.png",
+    "benchmark_bands": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\benchmark_human_vs_literature.png",
+    "mae_distribution": "C:\\Users\\liv\\sources\\sugar-sugar\\sugar-data-processing\\output\\notebook\\one_shot\\reports\\figures\\mae_distribution.png"
+  }
+}

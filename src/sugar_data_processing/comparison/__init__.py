@@ -1,6 +1,9 @@
-"""Benchmark context and anomaly detection."""
+"""Stage 4 — Data comparison.
 
-from sugar_data_processing.comparison.anomalies import detect_anomalies
-from sugar_data_processing.comparison.benchmarks import benchmark_context
+Place human person-level MAE against published GlucoBench / literature bands
+(study design §7.5). H6 (human vs baselines in sugar-sugar) remains deferred.
+"""
 
-__all__ = ["detect_anomalies", "benchmark_context"]
+from sugar_data_processing.comparison.benchmarks import BenchmarkContext, benchmark_context
+
+__all__ = ["BenchmarkContext", "benchmark_context"]

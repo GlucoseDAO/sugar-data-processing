@@ -46,7 +46,7 @@ def load_prediction_statistics(path: Path | str) -> pl.DataFrame:
     pseudonymized (study design §5.2).
     """
     csv_path = Path(path)
-    with start_action(action_type="extraction.load_prediction_statistics", path=str(csv_path)) as action:
+    with start_action(action_type="gathering.load_prediction_statistics", path=str(csv_path)) as action:
         if not csv_path.exists():
             raise FileNotFoundError(f"Statistics CSV not found: {csv_path}")
 

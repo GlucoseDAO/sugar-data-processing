@@ -59,7 +59,7 @@ def analyze(
         help="Use bundled synthetic fixture instead of --csv / data/raw",
     ),
 ) -> None:
-    """Extract → statistically test H1–H5 → compare → write markdown report."""
+    """Gather → verify → test H1–H5 → compare → write markdown report."""
     _configure_logging()
     if use_fixture:
         csv_path = DEFAULT_FIXTURE_CSV
@@ -87,10 +87,13 @@ def analyze(
 
     console.print(f"[bold]Analyzing[/bold] {csv_path}")
     result = run_analysis(csv_path, output)
+    v = result.verification
+    schema_label = "passed" if v.schema_ok else "FAILED"
     console.print(f"[green]Report written:[/green] {result.report_path}")
     console.print(
         f"Participants: {result.participants.height} | "
-        f"Anomalies: {len(result.anomalies)} | "
+        f"Verification: schema {schema_label}, "
+        f"{len(v.all_issues)} issues ({v.n_high} high) | "
         f"Mean MAE: {result.benchmarks.human_mean_mae:.2f} mg/dL"
     )
 

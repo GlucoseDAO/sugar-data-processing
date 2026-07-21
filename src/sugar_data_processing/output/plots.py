@@ -50,15 +50,21 @@ def generate_all_figures(
         figures_dir.mkdir(parents=True, exist_ok=True)
         paths: dict[str, Path] = {}
         paths["mae_by_diabetes"] = _plot_group_mae(
-            participants, "diabetic", "Diabetes status", figures_dir / "h1_mae_by_diabetes.png"
+            participants,
+            "diabetic",
+            "Diabetes status vs person MAE (PwD vs non-PwD)",
+            figures_dir / "h1_mae_by_diabetes.png",
         )
         paths["mae_by_cgm"] = _plot_group_mae(
-            participants, "uses_cgm", "CGM use", figures_dir / "h2_mae_by_cgm.png"
+            participants,
+            "uses_cgm",
+            "CGM use vs person MAE (users vs non-users)",
+            figures_dir / "h2_mae_by_cgm.png",
         )
         paths["diabetes_duration_scatter"] = _plot_duration_scatter(
             participants,
             x_col="diabetes_duration",
-            title="H3: Diabetes duration vs MAE",
+            title="Diabetes duration vs person MAE (PwD only)",
             xlabel="Diabetes duration (years)",
             path=figures_dir / "h3_diabetes_duration_scatter.png",
             diabetic_only=True,
@@ -66,7 +72,7 @@ def generate_all_figures(
         paths["cgm_duration_scatter"] = _plot_duration_scatter(
             participants,
             x_col="cgm_duration_years",
-            title="H4: CGM experience vs MAE",
+            title="CGM experience vs person MAE (CGM users only)",
             xlabel="CGM experience (years)",
             path=figures_dir / "h4_cgm_duration_scatter.png",
             cgm_only=True,
@@ -224,7 +230,7 @@ def _plot_own_vs_generic(participants: pl.DataFrame, path: Path) -> Path:
     ax.set_aspect("equal")
     ax.set_xlabel("Generic-data MAE (mg/dL)")
     ax.set_ylabel("Own-data MAE (mg/dL)")
-    ax.set_title("H5: Own vs generic (points below line → better on own)")
+    ax.set_title("Own vs generic MAE (below diagonal → better on own data)")
     ax.legend(fontsize=10)
     return _save(fig, path)
 

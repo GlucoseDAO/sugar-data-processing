@@ -8,7 +8,7 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.config import FORMAT_GENERIC, FORMAT_MIXED, FORMAT_OWN
-from sugar_data_processing.extraction.load import parse_per_round_metrics
+from sugar_data_processing.gathering.load import parse_per_round_metrics
 
 
 def classify_source(format_code: str, is_example_data: bool | None, round_number: int | None = None) -> str:
@@ -36,7 +36,7 @@ def classify_source(format_code: str, is_example_data: bool | None, round_number
 
 def build_round_table(runs: pl.DataFrame) -> pl.DataFrame:
     """Expand ``per_round_metrics`` into a tidy round-level frame."""
-    with start_action(action_type="extraction.build_round_table", n_runs=runs.height) as action:
+    with start_action(action_type="gathering.build_round_table", n_runs=runs.height) as action:
         rows: list[dict[str, Any]] = []
         for record in runs.iter_rows(named=True):
             metrics = parse_per_round_metrics(record.get("per_round_metrics"))
