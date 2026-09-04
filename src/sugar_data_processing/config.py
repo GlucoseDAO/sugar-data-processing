@@ -17,6 +17,25 @@ FORMAT_GENERIC: str = "A"
 FORMAT_OWN: str = "B"
 FORMAT_MIXED: str = "C"
 
+# Player × CGM cohort labels (unique people, not runs)
+COHORT_DIABETIC_CGM: str = "diabetic_cgm"
+COHORT_DIABETIC_NON_CGM: str = "diabetic_non_cgm"
+COHORT_NONDIABETIC_CGM: str = "nondiabetic_cgm"
+COHORT_NONDIABETIC_NON_CGM: str = "nondiabetic_non_cgm"
+COHORT_UNKNOWN: str = "unknown"
+
+COHORT_LABELS: dict[str, str] = {
+    COHORT_DIABETIC_CGM: "Diabetic with CGM",
+    COHORT_DIABETIC_NON_CGM: "Diabetic without CGM",
+    COHORT_NONDIABETIC_CGM: "Non-diabetic with CGM",
+    COHORT_NONDIABETIC_NON_CGM: "Non-diabetic without CGM",
+    COHORT_UNKNOWN: "Status unknown",
+}
+
+# Predicted-trace class (the data being guessed, not the player's own status)
+DATA_CLASS_DIABETIC: str = "diabetic"
+DATA_CLASS_NONDIABETIC: str = "nondiabetic"
+
 # GlucoBench / literature MAE bands for 60-minute horizon (mg/dL)
 SIMPLE_BASELINE_MAE_RANGE: tuple[float, float] = (12.0, 20.0)
 DEEP_LEARNING_MAE_RANGE: tuple[float, float] = (11.0, 17.0)
@@ -28,14 +47,14 @@ CLINICALLY_MEANINGFUL_MAE_DIFF: float = 3.5
 # Duration bins for exploratory H3/H4 plots
 DIABETES_DURATION_BINS: list[tuple[str, float, float]] = [
     ("<1 year", 0.0, 1.0),
-    ("1–5 years", 1.0, 5.0),
-    ("5–10 years", 5.0, 10.0),
+    ("1-5 years", 1.0, 5.0),
+    ("5-10 years", 5.0, 10.0),
     (">10 years", 10.0, float("inf")),
 ]
 CGM_DURATION_BINS: list[tuple[str, float, float]] = [
     ("<1 year", 0.0, 1.0),
-    ("1–2 years", 1.0, 2.0),
-    ("2–5 years", 2.0, 5.0),
+    ("1-2 years", 1.0, 2.0),
+    ("2-5 years", 2.0, 5.0),
     (">5 years", 5.0, float("inf")),
 ]
 

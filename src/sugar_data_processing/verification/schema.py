@@ -8,7 +8,11 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.config import FORMAT_GENERIC, FORMAT_MIXED, FORMAT_OWN
-from sugar_data_processing.gathering.load import REQUIRED_COLUMNS, parse_per_round_metrics
+from sugar_data_processing.gathering.load import (
+    REQUIRED_COLUMNS,
+    parse_per_round_metrics,
+    parse_round_context,
+)
 from sugar_data_processing.verification.anomalies import Anomaly
 
 ALLOWED_FORMATS: frozenset[str] = frozenset(
@@ -141,6 +145,19 @@ def verify_schema(runs: pl.DataFrame) -> list[Anomaly]:
                                 f"run_id={row.get('run_id')} "
                                 f"round={item.get('round_number')} mae={round_mae}"
                             ),
+                        )
+                    )
+
+            if "round_context" in row and row.get("round_context") not in (None, ""):
+                try:
+                    parse_round_context(row.get("round_context"))
+                except (SyntaxError, ValueError, TypeError) as exc:
+                    issues.append(
+                        Anomaly(
+                            study_id=sid,
+                            category="unparseable_round_context",
+                            severity="medium",
+                            detail=f"run_id={row.get('run_id')}: {exc}",
                         )
                     )
 

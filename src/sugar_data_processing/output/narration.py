@@ -194,11 +194,13 @@ def how_to_read_report() -> str:
     return (
         "## How to read this report\n\n"
         "Work top to bottom:\n"
-        "1. **Cohort snapshot** — who is in the analysis and how accurate they were overall.\n"
+        "1. **Cohort snapshot** — who is in the analysis, the four diabetes × CGM "
+        "buckets, task performance, and repeats.\n"
         "2. **Population rules** — who counts for each test (eligibility thresholds).\n"
         "3. **Primary hypotheses** — group comparisons (diabetes status, CGM use).\n"
         "4. **Secondary hypotheses** — experience correlations and own vs generic data.\n"
         "5. **Literature context** — human MAE vs published model bands.\n"
         "6. **Verification** — data-quality checks you should not skip.\n\n"
+        "There is also an interactive `study_explorer.html` next to this file.\n\n"
         f"{STATS_GLOSSARY}\n"
     )

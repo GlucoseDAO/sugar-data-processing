@@ -25,8 +25,17 @@ def test_full_pipeline_on_synthetic(tmp_path: Path) -> None:
     assert "Quick glossary" in report
     assert "data:image/png;base64," in report
     assert (out / "figures" / "h1_mae_by_diabetes.png").exists()
+    assert (out / "figures" / "cohort_categories_pie.png").exists()
+    assert (out / "figures" / "mae_by_format.png").exists()
+    assert (out / "figures" / "players_vs_repeats.png").exists()
+    assert (out / "figures" / "all_formats_own_vs_generic.png").exists()
     assert (out / "reports" / "figures" / "h1_mae_by_diabetes.png").exists()
     assert (out / "reports" / "study_analysis_report.json").exists()
+    explorer = out / "reports" / "study_explorer.html"
+    assert explorer.exists()
+    explorer_html = explorer.read_text(encoding="utf-8")
+    assert "Sugar Sugar study explorer" in explorer_html
+    assert "chart.js" in explorer_html.lower()
 
     # Planted effects should generally be detectable with n=80
     assert result.suite.h1 is not None

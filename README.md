@@ -14,7 +14,7 @@ library module, exercised in a Jupyter notebook, or run end-to-end via the CLI.
 | **2. Data verification** | `sugar_data_processing.verification` | Schema / structural checks + demographic & metric quality flags |
 | **3. Statistical tests** | `sugar_data_processing.statistics` | H1–H5 (§7.3–7.4) on person-level MAE |
 | **4. Data comparison** | `sugar_data_processing.comparison` | Human MAE vs GlucoBench / literature bands (§7.5) |
-| **5. Output** | `sugar_data_processing.output` | PNG figures + markdown / JSON report |
+| **5. Output** | `sugar_data_processing.output` | PNG figures + markdown / JSON report + interactive HTML explorer |
 
 Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 
@@ -46,7 +46,16 @@ Required columns (enforced on load + re-checked in verification):
 `cgm_duration_years`, `diabetic`, `diabetes_duration`, `rounds_played`,
 `overall_mae_mgdl`, `overall_rmse_mgdl`, `overall_mape_pct`, `per_round_metrics`
 
-Email / location / raw upload filenames are dropped on load (pseudonymization).
+Optional current-app columns (kept when present):
+
+`round_context`, `generic_intervention`, `challenge_unknown`,
+`challenge_unknown_pct`, `paper_mention`, `paper_full_name`, `diabetic_type`
+
+`cgm_duration_years` may be a bare year (legacy) or `value,unit` (`6,months`).
+Per-round `is_example_data` / `data_source_name` (in `per_round_metrics` or
+`round_context`) decide generic vs own — the run-level source is only the last
+dataset of that session. Email / location are dropped; personal upload filenames
+are redacted to `own_upload`.
 
 ### Analysis population (§7.2)
 
@@ -74,7 +83,7 @@ data/
   processed/       # parquet/csv intermediates (written by output stage)
 output/
   figures/         # PNGs
-  reports/         # study_analysis_report.md + .json (+ reports/figures/)
+  reports/         # study_analysis_report.md + .json + study_explorer.html (+ reports/figures/)
 tests/             # pytest (real synthetic data, no mocks)
 docs/
   analysis-plan.md # study design §7 → module map
@@ -106,6 +115,7 @@ Then open:
 
 - `output/reports/study_analysis_report.md`
 - `output/reports/study_analysis_report.json`
+- `output/reports/study_explorer.html`
 - `output/figures/*.png`
 
 Short alias:
@@ -117,7 +127,13 @@ uv run sdp analyze --fixture
 ### Real sugar-sugar export
 
 ```bash
-cp /path/to/sugar-sugar/data/input/prediction_statistics.csv data/raw/
+uv run sugar-data-processing analyze --csv ../sugar-sugar/data/input/prediction_statistics.csv
+```
+
+Or copy the export into this repo first:
+
+```bash
+cp ../sugar-sugar/data/input/prediction_statistics.csv data/raw/
 uv run sugar-data-processing analyze
 ```
 
@@ -197,7 +213,7 @@ write_report(
 | Verification | `VerificationReport` (schema + quality) | Embedded in report JSON / markdown §6 |
 | Statistics | `HypothesisSuite` (H1–H5) | Report §3–4 + JSON `hypotheses` |
 | Comparison | `BenchmarkContext` | Report §5 + JSON `benchmarks` |
-| Output | report path | `output/reports/*`, `output/figures/*`, `data/processed/*` |
+| Output | report path | `output/reports/*` (markdown, JSON, `study_explorer.html`), `output/figures/*`, `data/processed/*` |
 
 ### Verification details
 

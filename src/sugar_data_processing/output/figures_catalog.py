@@ -57,6 +57,26 @@ REPORT_FIGURES: tuple[ReportFigure, ...] = (
         "Human MAE vs published literature bands",
         "Where the human distribution sits relative to published model bands.",
     ),
+    ReportFigure(
+        "cohort_categories_pie.png",
+        "Cohort mix: diabetes × CGM",
+        "How many unique people sit in each of the four diabetes × CGM buckets.",
+    ),
+    ReportFigure(
+        "mae_by_format.png",
+        "Accuracy on each task (formats A, B, C)",
+        "Lower boxes mean better accuracy. A is generic, B is own data, C is mixed.",
+    ),
+    ReportFigure(
+        "players_vs_repeats.png",
+        "Unique players vs people who played again",
+        "Left: counts. Right: whether coming back is associated with better MAE.",
+    ),
+    ReportFigure(
+        "all_formats_own_vs_generic.png",
+        "People who played every variant: own vs generic",
+        "Below the diagonal: better on their own data than on generic traces.",
+    ),
 )
 
 

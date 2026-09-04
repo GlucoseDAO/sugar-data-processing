@@ -59,7 +59,7 @@ def analyze(
         help="Use bundled synthetic fixture instead of --csv / data/raw",
     ),
 ) -> None:
-    """Gather → verify → test H1–H5 → compare → write markdown report."""
+    """Gather → verify → test H1–H5 → compare → write markdown report and HTML explorer."""
     _configure_logging()
     if use_fixture:
         csv_path = DEFAULT_FIXTURE_CSV

@@ -139,7 +139,7 @@ def detect_anomalies(runs: pl.DataFrame, participants: pl.DataFrame) -> list[Ano
                         sid,
                         "below_primary_threshold",
                         "info",
-                        f"only {n_generic} generic rounds (need ≥{MIN_GENERIC_SEGMENTS})",
+                        f"only {n_generic} generic rounds (need >={MIN_GENERIC_SEGMENTS})",
                     )
                 )
 

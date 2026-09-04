@@ -3,6 +3,7 @@
 Figures (PNG) and markdown / JSON study analysis reports.
 """
 
+from sugar_data_processing.output.explorer import write_explorer_html
 from sugar_data_processing.output.figures_catalog import (
     REPORT_FIGURES,
     report_figures_dir,
@@ -34,5 +35,6 @@ __all__ = [
     "how_to_read_report",
     "report_figures_dir",
     "show_report_figures",
+    "write_explorer_html",
     "write_report",
 ]

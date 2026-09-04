@@ -13,6 +13,11 @@ from eliot import start_action
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
 from sugar_data_processing.config import (
     CGM_DURATION_BINS,
+    COHORT_DIABETIC_CGM,
+    COHORT_DIABETIC_NON_CGM,
+    COHORT_LABELS,
+    COHORT_NONDIABETIC_CGM,
+    COHORT_NONDIABETIC_NON_CGM,
     DEEP_LEARNING_MAE_RANGE,
     DIABETES_DURATION_BINS,
     SIMPLE_BASELINE_MAE_RANGE,
@@ -86,6 +91,18 @@ def generate_all_figures(
         )
         paths["mae_distribution"] = _plot_mae_distribution(
             participants, figures_dir / "mae_distribution.png"
+        )
+        paths["cohort_pie"] = _plot_cohort_pie(
+            participants, figures_dir / "cohort_categories_pie.png"
+        )
+        paths["mae_by_format"] = _plot_mae_by_format(
+            participants, figures_dir / "mae_by_format.png"
+        )
+        paths["players_vs_repeats"] = _plot_players_vs_repeats(
+            participants, figures_dir / "players_vs_repeats.png"
+        )
+        paths["all_formats_own_vs_generic"] = _plot_all_formats_own_vs_generic(
+            participants, figures_dir / "all_formats_own_vs_generic.png"
         )
         action.log(message_type="info", n_figures=len(paths), suite_h1=suite.h1 is not None)
         return paths
@@ -275,3 +292,176 @@ def _plot_mae_distribution(participants: pl.DataFrame, path: Path) -> Path:
     ax.set_ylabel("Count")
     ax.set_title("Distribution of per-person MAE")
     return _save(fig, path)
+
+
+_COHORT_ORDER: tuple[str, ...] = (
+    COHORT_DIABETIC_CGM,
+    COHORT_DIABETIC_NON_CGM,
+    COHORT_NONDIABETIC_CGM,
+    COHORT_NONDIABETIC_NON_CGM,
+)
+_COHORT_COLORS: dict[str, str] = {
+    COHORT_DIABETIC_CGM: "#E45756",
+    COHORT_DIABETIC_NON_CGM: "#F58518",
+    COHORT_NONDIABETIC_CGM: "#4C78A8",
+    COHORT_NONDIABETIC_NON_CGM: "#72B7B2",
+}
+_FORMAT_COLORS: dict[str, str] = {"A": "#4C78A8", "B": "#54A24B", "C": "#F58518"}
+
+
+def _plot_cohort_pie(participants: pl.DataFrame, path: Path) -> Path:
+    counts: dict[str, int] = {key: 0 for key in _COHORT_ORDER}
+    if "cohort_category" in participants.columns:
+        for row in participants.iter_rows(named=True):
+            key = str(row.get("cohort_category") or "")
+            if key in counts:
+                counts[key] += 1
+
+    fig, ax = plt.subplots(figsize=(8.5, 6))
+    values = [counts[k] for k in _COHORT_ORDER]
+    if sum(values) == 0:
+        ax.text(0.5, 0.5, "No cohort labels", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    labels = [f"{COHORT_LABELS[k]}\n({counts[k]})" for k in _COHORT_ORDER if counts[k] > 0]
+    sizes = [counts[k] for k in _COHORT_ORDER if counts[k] > 0]
+    colors = [_COHORT_COLORS[k] for k in _COHORT_ORDER if counts[k] > 0]
+    _wedges, _texts, autotexts = ax.pie(
+        sizes,
+        labels=labels,
+        colors=colors,
+        autopct=lambda pct: f"{pct:.0f}%" if pct >= 4 else "",
+        startangle=90,
+        wedgeprops={"linewidth": 1.5, "edgecolor": "white"},
+        textprops={"fontsize": 10},
+    )
+    for text in autotexts:
+        text.set_color("white")
+        text.set_fontweight("bold")
+    ax.set_title("Players by diabetes × CGM category")
+    return _save(fig, path)
+
+
+def _plot_mae_by_format(participants: pl.DataFrame, path: Path) -> Path:
+    labels: list[str] = []
+    values: list[float] = []
+    for fmt, col in (("A", "mae_format_a"), ("B", "mae_format_b"), ("C", "mae_format_c")):
+        if col not in participants.columns:
+            continue
+        for raw in participants[col].to_list():
+            if raw is None:
+                continue
+            number = float(raw)
+            if np.isfinite(number):
+                labels.append(f"Format {fmt}")
+                values.append(number)
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    if not values:
+        ax.text(0.5, 0.5, "No per-format MAE", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    order = ["Format A", "Format B", "Format C"]
+    palette = {"Format A": _FORMAT_COLORS["A"], "Format B": _FORMAT_COLORS["B"], "Format C": _FORMAT_COLORS["C"]}
+    sns.boxplot(x=labels, y=values, order=order, hue=labels, palette=palette, legend=False, ax=ax)
+    sns.stripplot(x=labels, y=values, order=order, ax=ax, color="#333333", alpha=0.45, size=4)
+    ax.set_title("How people performed on each task")
+    ax.set_xlabel("Task (A = generic, B = own data, C = mixed)")
+    ax.set_ylabel("Person MAE on that format (mg/dL)")
+    return _save(fig, path)
+
+
+def _plot_players_vs_repeats(participants: pl.DataFrame, path: Path) -> Path:
+    n_people = participants.height
+    n_repeat = (
+        int(participants.filter(pl.col("is_repeat_player")).height)
+        if "is_repeat_player" in participants.columns
+        else 0
+    )
+    n_single = n_people - n_repeat
+    n_runs = int(participants["n_runs"].sum()) if "n_runs" in participants.columns else n_people
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    axes[0].bar(
+        ["Unique players", "Single-run", "Repeat players", "Saved runs"],
+        [n_people, n_single, n_repeat, n_runs],
+        color=["#4C78A8", "#72B7B2", "#F58518", "#9D755D"],
+    )
+    axes[0].set_title("Individuals vs repeats")
+    axes[0].set_ylabel("Count")
+    axes[0].tick_params(axis="x", rotation=15)
+
+    labels: list[str] = []
+    values: list[float] = []
+    if "is_repeat_player" in participants.columns:
+        for row in participants.iter_rows(named=True):
+            mae = row.get("mae_primary")
+            if mae is None or not np.isfinite(mae):
+                continue
+            labels.append("Repeat players" if row.get("is_repeat_player") else "Single-run")
+            values.append(float(mae))
+    if values:
+        sns.boxplot(
+            x=labels,
+            y=values,
+            order=["Single-run", "Repeat players"],
+            ax=axes[1],
+            color="#4C78A8",
+        )
+        sns.stripplot(
+            x=labels,
+            y=values,
+            order=["Single-run", "Repeat players"],
+            ax=axes[1],
+            color="#333333",
+            alpha=0.5,
+            size=4,
+        )
+        axes[1].set_ylabel("Person MAE (mg/dL)")
+        axes[1].set_title("Accuracy: first-timers vs people who came back")
+    else:
+        axes[1].text(0.5, 0.5, "No MAE", ha="center", va="center")
+        axes[1].set_axis_off()
+    fig.suptitle("Who played once, and who played again", y=1.02)
+    return _save(fig, path)
+
+
+def _plot_all_formats_own_vs_generic(participants: pl.DataFrame, path: Path) -> Path:
+    if "played_all_formats" not in participants.columns:
+        fig, ax = plt.subplots(figsize=(7, 6))
+        ax.text(0.5, 0.5, "No all-format flag", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    df = participants.filter(pl.col("played_all_formats")).filter(
+        pl.col("mae_generic").is_not_null() & pl.col("mae_own").is_not_null()
+    )
+    fig, ax = plt.subplots(figsize=(7.2, 6.4))
+    if df.height == 0:
+        ax.text(0.5, 0.5, "No one played A, B and C with both scores", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    x = df["mae_generic"].to_numpy().astype(float)
+    y = df["mae_own"].to_numpy().astype(float)
+    better_own = int(np.sum(y < x))
+    better_generic = int(np.sum(x < y))
+    tied = int(df.height - better_own - better_generic)
+    ax.scatter(x, y, alpha=0.8, color="#54A24B", edgecolor="white", s=80)
+    lim_max = float(max(np.max(x), np.max(y)) * 1.08)
+    lim_min = float(min(np.min(x), np.min(y)) * 0.92)
+    ax.plot([lim_min, lim_max], [lim_min, lim_max], color="#666666", ls="--", label="equal MAE")
+    ax.set_xlim(lim_min, lim_max)
+    ax.set_ylim(lim_min, lim_max)
+    ax.set_aspect("equal")
+    ax.set_xlabel("Generic-data MAE (mg/dL)")
+    ax.set_ylabel("Own-data MAE (mg/dL)")
+    ax.set_title(
+        f"Players who tried every variant (n={df.height})\n"
+        f"Better on own: {better_own}  |  Better on generic: {better_generic}  |  Tied: {tied}"
+    )
+    ax.legend(fontsize=10)
+    return _save(fig, path)
+

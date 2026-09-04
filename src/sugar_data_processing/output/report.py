@@ -13,6 +13,8 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
+from sugar_data_processing.config import COHORT_LABELS
+from sugar_data_processing.output.explorer import write_explorer_html
 from sugar_data_processing.output.narration import (
     explain_hypothesis_result,
     how_to_read_report,
@@ -57,7 +59,12 @@ def write_report(
 
         participants.write_parquet(processed_dir / "participants.parquet")
         runs.write_parquet(processed_dir / "runs.parquet")
-        participants.write_csv(processed_dir / "participants.csv")
+        csv_ready = participants
+        if "formats_played" in csv_ready.columns:
+            csv_ready = csv_ready.with_columns(
+                pl.col("formats_played").cast(pl.List(pl.Utf8)).list.join(",").alias("formats_played")
+            )
+        csv_ready.write_csv(processed_dir / "participants.csv")
 
         figure_paths = generate_all_figures(participants, suite, benchmarks, figures_dir)
 
@@ -85,6 +92,13 @@ def write_report(
         )
         md_path.write_text(md, encoding="utf-8")
 
+        explorer_path = write_explorer_html(
+            participants=participants,
+            runs=runs,
+            output_path=reports_dir / "study_explorer.html",
+            source_csv=source_csv,
+        )
+
         payload: dict[str, Any] = {
             "generated_at": stamp,
             "source_csv": str(source_csv),
@@ -95,6 +109,7 @@ def write_report(
             "hypothesis_catalog": HYPOTHESES,
             "benchmarks": benchmarks.to_dict(),
             "figures": {k: str(v) for k, v in report_figure_paths.items()},
+            "explorer": str(explorer_path),
         }
         (reports_dir / "study_analysis_report.json").write_text(
             json.dumps(payload, indent=2, default=str),
@@ -117,6 +132,26 @@ def _embed_png(path: Path, caption: str) -> str:
         f"*Figure: {caption}*  \n"
         f"[PNG file]({rel})"
     )
+
+
+def _cohort_table(participants: pl.DataFrame) -> str:
+    if "cohort_category" not in participants.columns:
+        return ""
+    lines = [
+        "| Category | People | What it is |",
+        "| --- | ---: | --- |",
+    ]
+    counts = (
+        participants.group_by("cohort_category")
+        .len()
+        .to_dicts()
+    )
+    by_key = {str(row["cohort_category"]): int(row["len"]) for row in counts}
+    for key, label in COHORT_LABELS.items():
+        if key not in by_key:
+            continue
+        lines.append(f"| {label} | {by_key[key]} | `{key}` |")
+    return "\n".join(lines)
 
 
 def _issue_table(issues: list[Anomaly], limit: int = 80) -> str:
@@ -159,6 +194,20 @@ def _render_markdown(
     hyp = suite.to_dict()
     n_primary = int(participants.filter(pl.col("eligible_primary")).height)
     n_h5 = int(participants.filter(pl.col("eligible_h5")).height)
+    n_repeat = (
+        int(participants.filter(pl.col("is_repeat_player")).height)
+        if "is_repeat_player" in participants.columns
+        else 0
+    )
+    n_all_formats = (
+        int(participants.filter(pl.col("played_all_formats")).height)
+        if "played_all_formats" in participants.columns
+        else 0
+    )
+    n_runs_total = (
+        int(participants["n_runs"].sum()) if "n_runs" in participants.columns else runs.height
+    )
+    cohort_rows = _cohort_table(participants)
     all_issues = verification.all_issues
     schema_table = _issue_table(verification.schema_issues)
     quality_table = _issue_table(verification.quality_flags)
@@ -206,13 +255,28 @@ and what overall prediction accuracy looks like.
 | --- | ---: | --- |
 | Raw runs (rows) | {runs.height} | Completed app sessions in the export |
 | Unique participants | {participants.height} | Distinct people (`study_id`) |
+| Repeat players | {n_repeat} | People with more than one saved run |
+| Saved runs (all people) | {n_runs_total} | Sessions after counting replays |
+| Played every variant (A+B+C) | {n_all_formats} | People who tried generic, own, and mixed |
 | Eligible for primary analyses | {n_primary} | ≥6 generic segments (used for H1–H4) |
 | Eligible for own-vs-generic test | {n_h5} | ≥6 generic **and** ≥6 own (used for H5) |
 | Mean person MAE (mg/dL) | {benchmarks.human_mean_mae:.2f} | Average accuracy (lower is better) |
 | Median person MAE (mg/dL) | {benchmarks.human_median_mae:.2f} | Typical person (robust to outliers) |
 | SD person MAE (mg/dL) | {benchmarks.human_sd_mae:.2f} | Spread of accuracy across people |
 
+{cohort_rows}
+
 {img("mae_distribution", "Distribution of per-person MAE (mg/dL)")}
+
+{img("cohort_pie", "Unique people in each diabetes × CGM category")}
+
+{img("mae_by_format", "Person MAE on each task: A generic, B own data, C mixed")}
+
+{img("players_vs_repeats", "How many people played once vs came back, and their MAE")}
+
+{img("all_formats_own_vs_generic", "People who played every variant: own-data MAE vs generic MAE")}
+
+Interactive filters for the same pictures live in [`study_explorer.html`](study_explorer.html).
 
 ## 2. Analysis population rules (§7.2)
 
@@ -329,6 +393,7 @@ Total issues: **{len(all_issues)}** ({verification.n_high} high, {verification.n
 ## 8. Machine-readable artefacts
 
 - `study_analysis_report.json` — full hypothesis payloads + catalog
+- `study_explorer.html` — filterable charts for cohort, tasks, repeats, and own vs generic
 - `figures/` — PNG copies of every plot embedded above
 - processed participant / run tables under `processed/` (or repo `data/processed/`)
 """
