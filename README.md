@@ -103,50 +103,82 @@ uv sync --group dev
 
 ## How to run the whole thing
 
-End-to-end on the synthetic fixture (recommended first run):
+`sdp` is the short CLI name (`uv run sugar-data-processing` is the same).
+
+### Online study stats (what you usually want)
+
+The public site does not serve the research CSV. Pull it over SSH, scrub contact
+columns into `data/raw/` (gitignored), then run H1–H5.
+
+**Once per machine**
 
 ```bash
 uv sync
-uv run sugar-data-processing make-fixture
-uv run sugar-data-processing analyze --fixture
+cp .env.template .env
 ```
 
-Then open:
+Edit `.env` (never commit it):
 
-- `output/reports/study_analysis_report.md`
-- `output/reports/study_analysis_report.json`
-- `output/reports/study_explorer.html`
-- `output/figures/*.png`
+- `SUGAR_REMOTE` — the same `user@host:/path` you already `ssh` to (the CSV, or
+  the `data/input` directory that contains it)
+- `SUGAR_SSH_IDENTITY` — the same key you pass to `ssh -i`, if you use one
 
-Short alias:
+**Each time you want fresh online numbers**
 
 ```bash
+uv run sdp fetch --analyze
+```
+
+That is the whole online path: `scp` → blank `email` / `location` /
+`paper_full_name` → write `data/raw/prediction_statistics.csv` → reports.
+
+Pull only (no tests):
+
+```bash
+uv run sdp fetch
+```
+
+Re-run H1–H5 on the last pulled CSV (no SSH):
+
+```bash
+uv run sdp analyze
+```
+
+Then open the files in [Where the numbers are](#where-the-numbers-are).
+
+### Synthetic fixture (no credentials)
+
+```bash
+uv run sdp make-fixture
 uv run sdp analyze --fixture
 ```
 
-### Real sugar-sugar export
+### Local sugar-sugar checkout (not the live box)
 
 ```bash
-uv run sugar-data-processing analyze --csv ../sugar-sugar/data/input/prediction_statistics.csv
+uv run sdp fetch --sibling --analyze
 ```
 
-Or copy the export into this repo first:
+Or:
 
 ```bash
-cp ../sugar-sugar/data/input/prediction_statistics.csv data/raw/
-uv run sugar-data-processing analyze
-```
-
-Or pass an explicit path:
-
-```bash
-uv run sugar-data-processing analyze --csv /path/to/prediction_statistics.csv -o output
+uv run sdp analyze --csv ../sugar-sugar/data/input/prediction_statistics.csv
 ```
 
 Resolution order for `analyze` without `--csv` / `--fixture`:
 
 1. `data/raw/prediction_statistics.csv` if present
 2. else fixture (with a yellow warning)
+
+### Where the numbers are
+
+| File | What it is |
+| --- | --- |
+| `output/reports/study_analysis_report.md` | Readable report: cohort, H1–H5, verification |
+| `output/reports/study_analysis_report.json` | Same numbers, machine-readable (`hypotheses`, `benchmarks`) |
+| `output/reports/study_explorer.html` | Interactive tables / filters — open in a browser |
+| `output/figures/*.png` | Plots (also copied under `output/reports/figures/`) |
+| `data/processed/participants.csv` | Person-level analysis table |
 
 ### Jupyter (same library modules and same report folder)
 

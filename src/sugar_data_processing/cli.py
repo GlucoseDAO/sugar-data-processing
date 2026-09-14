@@ -14,8 +14,10 @@ from sugar_data_processing.config import (
     DEFAULT_FIXTURE_CSV,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_RAW_CSV,
+    DEFAULT_SIBLING_STATS,
     REPO_ROOT,
 )
+from sugar_data_processing.fetch import fetch_statistics, load_repo_dotenv
 from sugar_data_processing.fixtures.synthetic import write_synthetic_csv
 from sugar_data_processing.pipeline import run_analysis
 
@@ -34,6 +36,20 @@ def _configure_logging() -> None:
     to_nice_stdout()
     to_nice_file(logs / "eliot.jsonl", logs / "sugar_data_processing.log")
     to_file(open(logs / "eliot_raw.jsonl", "a", encoding="utf-8"))
+
+
+def _run_analyze(csv_path: Path, output: Path) -> None:
+    console.print(f"[bold]Analyzing[/bold] {csv_path}")
+    result = run_analysis(csv_path, output)
+    v = result.verification
+    schema_label = "passed" if v.schema_ok else "FAILED"
+    console.print(f"[green]Report written:[/green] {result.report_path}")
+    console.print(
+        f"Participants: {result.participants.height} | "
+        f"Verification: schema {schema_label}, "
+        f"{len(v.all_issues)} issues ({v.n_high} high) | "
+        f"Mean MAE: {result.benchmarks.human_mean_mae:.2f} mg/dL"
+    )
 
 
 @app.command("analyze")
@@ -85,17 +101,113 @@ def analyze(
         console.print(f"[red]CSV not found:[/red] {csv_path}")
         raise typer.Exit(code=1)
 
-    console.print(f"[bold]Analyzing[/bold] {csv_path}")
-    result = run_analysis(csv_path, output)
-    v = result.verification
-    schema_label = "passed" if v.schema_ok else "FAILED"
-    console.print(f"[green]Report written:[/green] {result.report_path}")
+    _run_analyze(csv_path, output)
+
+
+@app.command("fetch")
+def fetch(
+    remote: Optional[str] = typer.Option(
+        None,
+        "--remote",
+        help="SSH spec: host:/path or user@host:/path to the CSV or its data/input directory",
+    ),
+    sibling: bool = typer.Option(
+        False,
+        "--sibling",
+        help=f"Copy from the local sugar-sugar checkout ({DEFAULT_SIBLING_STATS})",
+    ),
+    source: Optional[Path] = typer.Option(
+        None,
+        "--source",
+        help="Local path to an already-downloaded prediction_statistics.csv",
+        exists=False,
+        dir_okay=False,
+    ),
+    dest: Path = typer.Option(
+        DEFAULT_RAW_CSV,
+        "--dest",
+        help="Where to write the scrubbed CSV (analyze reads this by default)",
+        dir_okay=False,
+    ),
+    identity: Optional[Path] = typer.Option(
+        None,
+        "--identity",
+        "-i",
+        help="SSH private key (passed to scp -i)",
+        exists=True,
+        dir_okay=False,
+    ),
+    keep_contact: bool = typer.Option(
+        False,
+        "--keep-contact",
+        help="Keep email / location / paper name (only on a machine you trust with prod)",
+    ),
+    ask_pass: bool = typer.Option(
+        False,
+        "--ask-pass",
+        help="Allow SSH password prompts (default is BatchMode, key-only)",
+    ),
+    then_analyze: bool = typer.Option(
+        False,
+        "--analyze",
+        help="Run the analysis pipeline after a successful fetch",
+    ),
+    output: Path = typer.Option(
+        DEFAULT_OUTPUT_DIR,
+        "--output",
+        "-o",
+        help="Output directory used with --analyze",
+        file_okay=False,
+    ),
+) -> None:
+    """Copy the live (or sibling) statistics CSV here, with contact fields blanked.
+
+    Configure the SSH target once in ``.env`` as ``SUGAR_REMOTE=user@host:/path``
+    and ``SUGAR_SSH_IDENTITY`` if you pass ``-i`` to ssh. Then:
+
+        uv run sdp fetch
+        uv run sdp fetch --analyze
+    """
+    _configure_logging()
+    load_repo_dotenv()
+    try:
+        pulled = fetch_statistics(
+            dest=dest,
+            remote=remote,
+            sibling=sibling,
+            source=source,
+            identity=identity,
+            batch=not ask_pass,
+            keep_contact=keep_contact,
+        )
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        if not remote and not sibling and source is None:
+            console.print(
+                "Set [bold]SUGAR_REMOTE[/bold] in .env to the same "
+                "user@host:/path you already ssh to (do not commit .env)."
+            )
+            if DEFAULT_SIBLING_STATS.exists():
+                console.print(
+                    "Or pull the local checkout: [bold]uv run sdp fetch --sibling[/bold]"
+                )
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Wrote[/green] {pulled.dest}")
+    console.print(f"Source: {pulled.source}")
     console.print(
-        f"Participants: {result.participants.height} | "
-        f"Verification: schema {schema_label}, "
-        f"{len(v.all_issues)} issues ({v.n_high} high) | "
-        f"Mean MAE: {result.benchmarks.human_mean_mae:.2f} mg/dL"
+        f"Rows: {pulled.n_rows} | Participants: {pulled.n_participants} | "
+        f"Scrubbed: {', '.join(pulled.scrubbed) or 'none'}"
     )
+    extra = [
+        col
+        for col in ("round_context", "generic_intervention", "challenge_unknown")
+        if col in pulled.columns
+    ]
+    if extra:
+        console.print(f"Current-app columns present: {', '.join(extra)}")
+    if then_analyze:
+        _run_analyze(pulled.dest, output)
 
 
 @app.command("make-fixture")
