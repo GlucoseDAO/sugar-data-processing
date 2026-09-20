@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+import polars as pl
+
+from sugar_data_processing.fixtures.synthetic import write_synthetic_csv
+from sugar_data_processing.gathering import build_participant_table, load_prediction_statistics
+from sugar_data_processing.statistics.hypotheses import run_all_hypotheses
 from sugar_data_processing.statistics.tests import (
     correlation_analysis,
     independent_group_comparison,
@@ -40,3 +46,33 @@ def test_correlation_negative_duration() -> None:
     )
     assert result.coefficient < 0
     assert result.significant
+
+
+def test_h1_h4_are_category_then_own_vs_generic(tmp_path: Path) -> None:
+    csv_path = tmp_path / "prediction_statistics.csv"
+    write_synthetic_csv(csv_path, n_participants=60, seed=7)
+    people = build_participant_table(load_prediction_statistics(csv_path))
+    suite = run_all_hypotheses(people)
+    payload = suite.to_dict()
+
+    assert "diabetes_duration_months" in people.columns
+    pwd = people.filter(pl.col("diabetic") == True)  # noqa: E712
+    if pwd.height:
+        years = float(pwd["diabetes_duration"][0])
+        months = float(pwd["diabetes_duration_months"][0])
+        assert abs(months - years * 12.0) < 1e-6
+
+    for key in ("h1", "h2", "h3", "h4"):
+        layered = payload[key]
+        assert isinstance(layered["by_category"], list)
+        assert {row["category"] for row in layered["by_category"]}
+        assert "overall" in layered
+        assert "generic" in layered
+        assert "own" in layered
+
+    assert suite.h3.overall is not None
+    assert suite.h3.overall.predictor == "diabetes_duration_months"
+    assert suite.h4.overall is not None
+    assert suite.h4.overall.predictor == "cgm_duration_months"
+    assert suite.h1.overall is not None
+    assert suite.h1.mean_a < suite.h1.mean_b

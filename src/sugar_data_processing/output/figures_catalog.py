@@ -24,28 +24,33 @@ REPORT_FIGURES: tuple[ReportFigure, ...] = (
     ),
     ReportFigure(
         "h1_mae_by_diabetes.png",
-        "H1 - Diabetes status: PwD vs non-PwD",
-        "Lower boxes mean better accuracy. Compare the two groups visually.",
+        "H1 - Diabetes status: PwD vs non-PwD, generic vs own",
+        "Each category is split into generic-data MAE and own-data MAE. Lower is better.",
     ),
     ReportFigure(
         "h2_mae_by_cgm.png",
-        "H2 - CGM use: users vs non-users",
-        "Same idea as H1, now split by CGM use.",
+        "H2 - CGM use: users vs non-users, generic vs own",
+        "Same idea as H1: category first, then generic vs own inside each group.",
     ),
     ReportFigure(
         "h3_diabetes_duration_scatter.png",
-        "H3 - Diabetes duration vs MAE (PwD only)",
-        "A downward trend would mean longer duration associates with better accuracy.",
+        "H3 - Diabetes duration (months) vs MAE on generic and own data",
+        "Duration is in months so short experience is readable. Blue is generic, green is own.",
     ),
     ReportFigure(
         "h4_cgm_duration_scatter.png",
-        "H4 - CGM experience vs MAE (CGM users)",
-        "A downward trend would mean more CGM experience associates with better accuracy.",
+        "H4 - CGM experience (months) vs MAE on generic and own data",
+        "Same layout as H3: months on x, blue generic / green own. A downward trend would mean more experience helps.",
     ),
     ReportFigure(
-        "h3_h4_duration_bins.png",
-        "Exploratory duration / experience bins",
-        "Same story as the scatters, summarised in duration bins.",
+        "people_clusters.png",
+        "People as points in own vs generic space",
+        "Each dot is one person. Colour is the diabetes × CGM cohort. A dark ring means they opted into Challenge the unknown.",
+    ),
+    ReportFigure(
+        "opposite_trait.png",
+        "Same-trait vs opposite-trait traces",
+        "Left: every person who has a score on that side. Right: people who played both. Below the diagonal is better on the opposite trait.",
     ),
     ReportFigure(
         "h5_own_vs_generic.png",
@@ -101,7 +106,7 @@ def show_report_figures(output_dir: Path) -> list[Path]:
         if not path.exists():
             print("missing:", path)
             continue
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=(12, 7.5))
         ax.imshow(mpimg.imread(path))
         ax.set_axis_off()
         ax.set_title(item.title)

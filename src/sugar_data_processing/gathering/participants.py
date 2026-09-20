@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import polars as pl
 from eliot import start_action
 
@@ -47,6 +49,26 @@ def _format_mae(rounds: pl.DataFrame, format_code: str, prefix: str) -> pl.DataF
         .agg(
             pl.col("mae").mean().alias(f"mae_format_{prefix}"),
             pl.len().alias(f"n_rounds_format_{prefix}"),
+        )
+    )
+
+
+def _trait_side_mae(rounds: pl.DataFrame, opposite: bool, prefix: str) -> pl.DataFrame:
+    empty = pl.DataFrame(
+        schema={
+            "study_id": pl.Utf8,
+            f"mae_{prefix}": pl.Float64,
+            f"n_rounds_{prefix}": pl.Int64,
+        }
+    )
+    if "is_opposite_trait" not in rounds.columns or rounds.height == 0:
+        return empty
+    return (
+        rounds.filter(pl.col("is_opposite_trait") == opposite)
+        .group_by("study_id")
+        .agg(
+            pl.col("mae").mean().alias(f"mae_{prefix}"),
+            pl.len().alias(f"n_rounds_{prefix}"),
         )
     )
 
@@ -116,6 +138,10 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
         mae_a = _format_mae(rounds, FORMAT_GENERIC, "a")
         mae_b = _format_mae(rounds, FORMAT_OWN, "b")
         mae_c = _format_mae(rounds, FORMAT_MIXED, "c")
+        same_trait = _trait_side_mae(rounds, opposite=False, prefix="same_trait")
+        opposite_trait = _trait_side_mae(rounds, opposite=True, prefix="opposite_trait")
+        challenge_history = _challenge_history(runs)
+        trait_flags = _trait_flags(rounds)
 
         participants = (
             demographics.join(generic, on="study_id", how="left")
@@ -125,6 +151,10 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             .join(mae_a, on="study_id", how="left")
             .join(mae_b, on="study_id", how="left")
             .join(mae_c, on="study_id", how="left")
+            .join(same_trait, on="study_id", how="left")
+            .join(opposite_trait, on="study_id", how="left")
+            .join(challenge_history, on="study_id", how="left")
+            .join(trait_flags, on="study_id", how="left")
             .with_columns(
                 pl.col("n_rounds_generic").fill_null(0).cast(pl.Int64),
                 pl.col("n_rounds_own").fill_null(0).cast(pl.Int64),
@@ -134,6 +164,10 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
                 pl.col("n_rounds_format_a").fill_null(0).cast(pl.Int64),
                 pl.col("n_rounds_format_b").fill_null(0).cast(pl.Int64),
                 pl.col("n_rounds_format_c").fill_null(0).cast(pl.Int64),
+                pl.col("n_rounds_same_trait").fill_null(0).cast(pl.Int64),
+                pl.col("n_rounds_opposite_trait").fill_null(0).cast(pl.Int64),
+                pl.col("played_challenge_unknown").fill_null(False),
+                pl.col("played_opposite_trait").fill_null(False),
                 pl.coalesce([pl.col("mae_generic"), pl.col("mae_overall")]).alias("mae_primary"),
                 pl.coalesce([pl.col("rmse_generic"), pl.col("rmse_overall")]).alias("rmse_primary"),
             )
@@ -145,6 +179,9 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
                     & (pl.col("n_rounds_own") >= MIN_OWN_SEGMENTS)
                 ).alias("eligible_h5"),
                 (pl.col("mae_generic") - pl.col("mae_own")).alias("mae_diff_generic_minus_own"),
+                (pl.col("mae_same_trait") - pl.col("mae_opposite_trait")).alias(
+                    "mae_diff_same_minus_opposite"
+                ),
                 (pl.col("n_runs") > 1).alias("is_repeat_player"),
                 (pl.col("n_formats_played") >= 3).alias("played_all_formats"),
             )
@@ -155,6 +192,14 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             for row in participants.iter_rows(named=True)
         ]
         participants = participants.with_columns(pl.Series("cohort_category", categories))
+        if "diabetes_duration" in participants.columns:
+            participants = participants.with_columns(
+                (pl.col("diabetes_duration") * 12.0).alias("diabetes_duration_months")
+            )
+        if "cgm_duration_years" in participants.columns:
+            participants = participants.with_columns(
+                (pl.col("cgm_duration_years") * 12.0).alias("cgm_duration_months")
+            )
 
         action.log(
             message_type="info",
@@ -163,6 +208,8 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             n_eligible_h5=int(participants.filter(pl.col("eligible_h5")).height),
             n_repeat_players=int(participants.filter(pl.col("is_repeat_player")).height),
             n_all_formats=int(participants.filter(pl.col("played_all_formats")).height),
+            n_challenge_unknown=int(participants.filter(pl.col("played_challenge_unknown")).height),
+            n_opposite_trait=int(participants.filter(pl.col("played_opposite_trait")).height),
         )
         return participants
 
@@ -187,3 +234,78 @@ def h5_paired_population(participants: pl.DataFrame) -> pl.DataFrame:
 def all_format_population(participants: pl.DataFrame) -> pl.DataFrame:
     """People who saved at least one run of every format (A, B, and C)."""
     return participants.filter(pl.col("played_all_formats"))
+
+
+def _challenge_history(runs: pl.DataFrame) -> pl.DataFrame:
+    if "challenge_unknown" not in runs.columns:
+        return runs.select("study_id").unique().with_columns(
+            pl.lit(False).alias("played_challenge_unknown")
+        )
+    return runs.group_by("study_id").agg(
+        pl.col("challenge_unknown").fill_null(False).any().alias("played_challenge_unknown")
+    )
+
+
+def _trait_flags(rounds: pl.DataFrame) -> pl.DataFrame:
+    if "is_opposite_trait" not in rounds.columns:
+        return rounds.select("study_id").unique().with_columns(
+            pl.lit(False).alias("played_opposite_trait"),
+            pl.lit("unknown").alias("player_trait"),
+        )
+    return rounds.group_by("study_id").agg(
+        pl.col("is_opposite_trait").fill_null(False).any().alias("played_opposite_trait"),
+        pl.col("player_trait").last().alias("player_trait"),
+    )
+
+
+def opposite_trait_summary(participants: pl.DataFrame) -> dict[str, Any]:
+    """Counts and MAE for same-trait vs opposite-trait (Challenge the unknown)."""
+    n_challenge = (
+        int(participants.filter(pl.col("played_challenge_unknown")).height)
+        if "played_challenge_unknown" in participants.columns
+        else 0
+    )
+    n_opposite = (
+        int(participants.filter(pl.col("played_opposite_trait")).height)
+        if "played_opposite_trait" in participants.columns
+        else 0
+    )
+    same = (
+        participants.filter(pl.col("mae_same_trait").is_not_null())["mae_same_trait"]
+        if "mae_same_trait" in participants.columns
+        else None
+    )
+    opp = (
+        participants.filter(pl.col("mae_opposite_trait").is_not_null())["mae_opposite_trait"]
+        if "mae_opposite_trait" in participants.columns
+        else None
+    )
+    both = participants
+    if "mae_same_trait" in participants.columns and "mae_opposite_trait" in participants.columns:
+        both = participants.filter(
+            pl.col("mae_same_trait").is_not_null() & pl.col("mae_opposite_trait").is_not_null()
+        )
+    else:
+        both = participants.head(0)
+
+    def _mean(frame: pl.Series | None) -> float | None:
+        if frame is None or frame.len() == 0:
+            return None
+        value = frame.mean()
+        return float(value) if value is not None else None
+
+    return {
+        "n_challenge_unknown": n_challenge,
+        "n_played_opposite_trait": n_opposite,
+        "n_with_same_trait_mae": int(same.len()) if same is not None else 0,
+        "n_with_opposite_trait_mae": int(opp.len()) if opp is not None else 0,
+        "n_with_both_sides": both.height,
+        "mean_mae_same_trait": _mean(same),
+        "mean_mae_opposite_trait": _mean(opp),
+        "mean_mae_same_among_both": (
+            float(both["mae_same_trait"].mean()) if both.height else None
+        ),
+        "mean_mae_opposite_among_both": (
+            float(both["mae_opposite_trait"].mean()) if both.height else None
+        ),
+    }

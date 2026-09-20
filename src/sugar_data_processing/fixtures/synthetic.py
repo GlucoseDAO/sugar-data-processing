@@ -47,7 +47,10 @@ def write_synthetic_csv(
 
         n_generic = 8
         n_own = 8 if i % 4 != 3 else 3
-        generic_source = "D1NAMO-001.csv" if diabetic else "BIGIDEAS-001.csv"
+        home_source = "D1NAMO-001.csv" if diabetic else "BIGIDEAS-001.csv"
+        opposite_source = "BIGIDEAS-001.csv" if diabetic else "D1NAMO-001.csv"
+        # Challenge the unknown: opt-in opposite-corpus mix on A/C (T1 and non-PwD)
+        challenge = i % 5 == 0
 
         rows.append(
             _run_row(
@@ -63,8 +66,10 @@ def write_synthetic_csv(
                 mean_mae=generic_mae,
                 rng=rng,
                 number=0,
-                source_name=generic_source,
+                source_name=home_source,
                 timestamp_day=1,
+                challenge_unknown=challenge,
+                opposite_source=opposite_source,
             )
         )
         if replay:
@@ -82,8 +87,10 @@ def write_synthetic_csv(
                     mean_mae=float(np.clip(generic_mae - 1.0, 3.0, 120.0)),
                     rng=rng,
                     number=3,
-                    source_name=generic_source,
+                    source_name=home_source,
                     timestamp_day=10,
+                    challenge_unknown=challenge,
+                    opposite_source=opposite_source,
                 )
             )
         if n_own >= 6 or i % 2 == 0:
@@ -120,10 +127,12 @@ def write_synthetic_csv(
                     mean_mae=mixed_mae,
                     rng=rng,
                     number=2,
-                    source_name=generic_source,
+                    source_name=home_source,
                     timestamp_day=3,
                     mixed=True,
-                    generic_source=generic_source,
+                    generic_source=home_source,
+                    challenge_unknown=challenge,
+                    opposite_source=opposite_source,
                 )
             )
 
@@ -150,10 +159,16 @@ def _run_row(
     timestamp_day: int,
     mixed: bool = False,
     generic_source: str = "example.csv",
+    challenge_unknown: bool = False,
+    opposite_source: str = "BIGIDEAS-001.csv",
+    n_points: int = 6,
 ) -> dict[object, object]:
     round_maes = np.clip(rng.normal(mean_mae, 3.0, size=n_rounds), 1.0, 150.0)
     per_round: list[dict[object, object]] = []
     round_context: list[dict[object, object]] = []
+    predicted_values: list[dict[object, object]] = []
+    real_values: list[dict[object, object]] = []
+    prediction_times: list[dict[object, object]] = []
     for r in range(n_rounds):
         round_number = r + 1
         if mixed:
@@ -162,6 +177,13 @@ def _run_row(
         else:
             round_is_example = is_example
             round_source = source_name
+        if challenge_unknown and round_is_example and round_number % 2 == 0:
+            round_source = opposite_source
+        window_index = r * 12
+        hour = 8 + r
+        window_start = f"2026-01-01 {hour:02d}:00:00"
+        pred_start = f"2026-01-01 {hour:02d}:30:00"
+        window_end = f"2026-01-01 {hour:02d}:55:00"
         per_round.append(
             {
                 "round_number": round_number,
@@ -181,13 +203,28 @@ def _run_row(
                 "data_source_name": round_source,
                 "is_example_data": round_is_example,
                 "generic_slice_key": f"slice-{round_number}" if round_is_example else "",
-                "prediction_window_start_index": 0,
-                "prediction_window_size": 12,
-                "window_start_time": "2026-01-01 08:00:00",
-                "prediction_start_time": "2026-01-01 09:00:00",
-                "window_end_time": "2026-01-01 10:00:00",
+                "prediction_window_start_index": window_index,
+                "prediction_window_size": n_points,
+                "window_start_time": window_start,
+                "prediction_start_time": pred_start,
+                "window_end_time": window_end,
             }
         )
+        baseline = 140.0 if "D1NAMO" in round_source else 95.0
+        for point_i in range(n_points):
+            real = float(np.clip(baseline + rng.normal(0, 8.0), 50.0, 280.0))
+            pred = float(np.clip(real + rng.normal(0, max(round_maes[r] / 2.0, 1.0)), 40.0, 300.0))
+            minute = point_i * 5
+            stamp = f"2026-01-01 {hour:02d}:{minute:02d}:00"
+            predicted_values.append(
+                {"version": format_code, "round": round_number, "value": f"{pred:.1f}"}
+            )
+            real_values.append(
+                {"version": format_code, "round": round_number, "value": f"{real:.1f}"}
+            )
+            prediction_times.append(
+                {"version": format_code, "round": round_number, "value": stamp}
+            )
     overall_mae = float(np.mean(round_maes))
     cgm_cell = f"{cgm_duration:g},years" if uses_cgm else ""
     return {
@@ -209,17 +246,21 @@ def _run_row(
         "diabetes_duration": diabetes_duration if diabetic else "",
         "location": "Test City",
         "rounds_played": n_rounds,
-        "predicted_values": "[]",
-        "real_values": "[]",
-        "prediction_times": "[]",
+        "predicted_values": str(predicted_values),
+        "real_values": str(real_values),
+        "prediction_times": str(prediction_times),
         "overall_mae_mgdl": overall_mae,
         "overall_mse_mgdl": float(np.mean(round_maes**2)),
         "overall_rmse_mgdl": float(np.sqrt(np.mean(round_maes**2))),
         "overall_mape_pct": float(overall_mae / 1.5),
         "per_round_metrics": str(per_round),
-        "generic_intervention": "d1namo" if diabetic else "bigideas",
-        "challenge_unknown": False,
-        "challenge_unknown_pct": "",
+        "generic_intervention": (
+            "mix:bigideas=0.50,d1namo=0.50"
+            if challenge_unknown
+            else ("d1namo" if diabetic else "bigideas")
+        ),
+        "challenge_unknown": challenge_unknown,
+        "challenge_unknown_pct": 50 if challenge_unknown else "",
         "paper_mention": False,
         "paper_full_name": "",
         "round_context": str(round_context),

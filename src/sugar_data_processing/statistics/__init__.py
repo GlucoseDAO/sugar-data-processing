@@ -10,7 +10,12 @@ from sugar_data_processing.statistics.catalog import (
     hypothesis_blurb,
     hypothesis_heading,
 )
-from sugar_data_processing.statistics.hypotheses import HypothesisSuite, run_all_hypotheses
+from sugar_data_processing.statistics.hypotheses import (
+    HypothesisSuite,
+    LayeredHypothesisResult,
+    category_prediction_summary,
+    run_all_hypotheses,
+)
 from sugar_data_processing.statistics.tests import (
     correlation_analysis,
     independent_group_comparison,
@@ -23,6 +28,8 @@ __all__ = [
     "hypothesis_blurb",
     "hypothesis_heading",
     "HypothesisSuite",
+    "LayeredHypothesisResult",
+    "category_prediction_summary",
     "run_all_hypotheses",
     "independent_group_comparison",
     "paired_comparison",

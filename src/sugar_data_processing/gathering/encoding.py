@@ -25,6 +25,14 @@ def parse_literal(value: Any) -> Any:
     return ast.literal_eval(text)
 
 
+def as_strict_bool(value: Any, *, default: bool = False) -> bool:
+    """Bool only. Blank / missing / unparseable become ``default``."""
+    parsed = parse_optional_bool(value)
+    if parsed is None:
+        return default
+    return parsed
+
+
 def parse_optional_bool(value: Any) -> bool | None:
     """Three-state bool: true / false / unknown (blank)."""
     if value is None:
@@ -100,6 +108,13 @@ def parse_duration_years(raw: Any) -> float | None:
     return cgm_duration_to_years(raw)
 
 
+def years_to_months(years: float | None) -> float | None:
+    """Convert a year count to months. ``None`` stays ``None``."""
+    if years is None:
+        return None
+    return float(years) * 12.0
+
+
 def parse_round_context(cell: Any) -> list[dict[str, Any]]:
     """Parse the ``round_context`` Python-literal list (empty if missing)."""
     parsed = parse_literal(cell)
@@ -118,6 +133,26 @@ def parse_per_round_metrics(cell: Any) -> list[dict[str, Any]]:
     if not isinstance(parsed, list):
         raise TypeError(f"per_round_metrics must be a list, got {type(parsed)}")
     return [item for item in parsed if isinstance(item, dict)]
+
+
+def parse_point_series(cell: Any) -> list[dict[str, Any]]:
+    """Parse ``predicted_values`` / ``real_values`` / ``prediction_times``.
+
+    Each item is ``{version, round, value}``. Empty or missing cells are ``[]``.
+    """
+    parsed = parse_literal(cell)
+    if parsed is None:
+        return []
+    if not isinstance(parsed, list):
+        raise TypeError(f"point series must be a list, got {type(parsed)}")
+    return [item for item in parsed if isinstance(item, dict)]
+
+
+def series_value(item: dict[str, Any]) -> Any:
+    """Pull the payload from a ``{version, round, value}`` point."""
+    if "value" in item:
+        return item.get("value")
+    return item.get("v")
 
 
 def _as_number(raw: Any) -> float | None:

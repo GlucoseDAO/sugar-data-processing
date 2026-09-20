@@ -14,7 +14,8 @@ library module, exercised in a Jupyter notebook, or run end-to-end via the CLI.
 | **2. Data verification** | `sugar_data_processing.verification` | Schema / structural checks + demographic & metric quality flags |
 | **3. Statistical tests** | `sugar_data_processing.statistics` | H1–H5 (§7.3–7.4) on person-level MAE |
 | **4. Data comparison** | `sugar_data_processing.comparison` | Human MAE vs GlucoBench / literature bands (§7.5) |
-| **5. Output** | `sugar_data_processing.output` | PNG figures + markdown / JSON report + interactive HTML explorer |
+| **5. Output** | `sugar_data_processing.output` | PNG figures + **human** markdown / JSON / HTML explorer |
+| **6. AI export / ingest** | `sugar_data_processing.ai` | Sequence CSVs for models; AI edition after ingest |
 
 Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 
@@ -22,12 +23,12 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 
 | Hypothesis | Question | Test path |
 | --- | --- | --- |
-| **H1** | PwD vs non-PwD MAE | Shapiro → t-test / Mann–Whitney |
-| **H2** | CGM vs non-CGM MAE | Shapiro → t-test / Mann–Whitney |
-| **H3** | Diabetes duration vs MAE | Pearson / Spearman + log exploratory |
-| **H4** | CGM experience vs MAE | Pearson / Spearman + log exploratory |
+| **H1** | PwD vs non-PwD MAE (category first, then generic vs own) | Shapiro → t-test / Mann–Whitney |
+| **H2** | CGM vs non-CGM MAE (category first, then generic vs own) | Shapiro → t-test / Mann–Whitney |
+| **H3** | Diabetes duration (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
+| **H4** | CGM experience (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
-| **H6** | Human vs baseline models | Deferred until baselines exist in sugar-sugar |
+| **H6** | Human vs baseline models | Deferred in the human edition; AI edition after `sdp ingest-ai` |
 
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.
@@ -49,7 +50,8 @@ Required columns (enforced on load + re-checked in verification):
 Optional current-app columns (kept when present):
 
 `round_context`, `generic_intervention`, `challenge_unknown`,
-`challenge_unknown_pct`, `paper_mention`, `paper_full_name`, `diabetic_type`
+`challenge_unknown_pct`, `paper_mention`, `paper_full_name`, `diabetic_type`,
+`predicted_values`, `real_values`, `prediction_times`
 
 `cgm_duration_years` may be a bare year (legacy) or `value,unit` (`6,months`).
 Per-round `is_example_data` / `data_source_name` (in `per_round_metrics` or
@@ -71,9 +73,10 @@ src/sugar_data_processing/
   verification/    # stage 2 — schema checks + quality flags
   statistics/      # stage 3 — H1–H5 tests + effect sizes
   comparison/      # stage 4 — GlucoBench / literature bands
-  output/          # stage 5 — plots + markdown/JSON report
+  output/          # stage 5 — plots + human markdown/JSON/HTML
+  ai/              # sequence export + model ingest + AI report
   fixtures/        # synthetic CSV generator
-  pipeline.py      # run_analysis() wires stages 1→5
+  pipeline.py      # run_analysis() wires stages 1→5 (+ AI export)
   cli.py           # Typer entry point
 notebooks/
   study_analysis.ipynb   # thin walkthrough over the library (same paths as CLI)
@@ -83,7 +86,7 @@ data/
   processed/       # parquet/csv intermediates (written by output stage)
 output/
   figures/         # PNGs
-  reports/         # study_analysis_report.md + .json + study_explorer.html (+ reports/figures/)
+  reports/         # human_analysis_report.md + human_explorer.html + AI stubs
 tests/             # pytest (real synthetic data, no mocks)
 docs/
   analysis-plan.md # study design §7 → module map
@@ -174,11 +177,27 @@ Resolution order for `analyze` without `--csv` / `--fixture`:
 
 | File | What it is |
 | --- | --- |
-| `output/reports/study_analysis_report.md` | Readable report: cohort, H1–H5, verification |
-| `output/reports/study_analysis_report.json` | Same numbers, machine-readable (`hypotheses`, `benchmarks`) |
-| `output/reports/study_explorer.html` | Interactive tables / filters — open in a browser |
+| `output/reports/human_analysis_report.md` | **Human** edition: cohort, H1–H5, opposite trait, verification |
+| `output/reports/human_explorer.html` | Same results, interactive (point clouds, not bins) |
+| `output/reports/ai_analysis_report.md` | **AI** edition (scaffold until `sdp ingest-ai`) |
+| `output/reports/human_analysis_report.json` | Machine-readable human payload |
+| `data/processed/ai/prediction_points.csv` | Per-point sequences for post-factum model scoring |
 | `output/figures/*.png` | Plots (also copied under `output/reports/figures/`) |
 | `data/processed/participants.csv` | Person-level analysis table |
+
+Export sequences only (no full report rewrite):
+
+```bash
+uv run sdp export-ai
+```
+
+After a model writes predictions (join keys `study_id, run_id, round_number, point_index`):
+
+```bash
+uv run sdp ingest-ai --predictions path/to/model.csv
+```
+
+`evaluation_mode` is `post_factum` today (replay saved games). `in_place` is reserved for scores collected during the live game.
 
 ### Jupyter (same library modules and same report folder)
 
@@ -245,7 +264,7 @@ write_report(
 | Verification | `VerificationReport` (schema + quality) | Embedded in report JSON / markdown §6 |
 | Statistics | `HypothesisSuite` (H1–H5) | Report §3–4 + JSON `hypotheses` |
 | Comparison | `BenchmarkContext` | Report §5 + JSON `benchmarks` |
-| Output | report path | `output/reports/*` (markdown, JSON, `study_explorer.html`), `output/figures/*`, `data/processed/*` |
+| Output | report path | `output/reports/human_*`, AI stub, `output/figures/*`, `data/processed/*` + `data/processed/ai/` |
 
 ### Verification details
 
@@ -265,5 +284,6 @@ uv run pytest
 
 ## Notes
 
-- H6 is intentionally not implemented yet (study design defers baseline models).
+- H6 is deferred in the **human** edition. Sequences are exported so models can
+  be scored post factum; `sdp ingest-ai` fills the **AI** edition.
 - See `docs/analysis-plan.md` for the §7 → module mapping and format conventions.

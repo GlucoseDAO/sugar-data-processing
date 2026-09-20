@@ -6,17 +6,27 @@ import base64
 import json
 import shutil
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 from eliot import start_action
 
+from sugar_data_processing.ai.export import export_prediction_sequences
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
-from sugar_data_processing.config import COHORT_LABELS
-from sugar_data_processing.output.explorer import write_explorer_html
+from sugar_data_processing.config import (
+    COHORT_LABELS,
+    HUMAN_EXPLORER_HTML,
+    HUMAN_REPORT_JSON,
+    HUMAN_REPORT_MD,
+)
+from sugar_data_processing.gathering.participants import opposite_trait_summary
+from sugar_data_processing.output.explorer import markdown_fragment_to_html, write_explorer_html
 from sugar_data_processing.output.narration import (
+    explain_edition_and_ai_path,
     explain_hypothesis_result,
+    explain_opposite_trait,
     how_to_read_report,
 )
 from sugar_data_processing.output.plots import generate_all_figures
@@ -66,6 +76,9 @@ def write_report(
             )
         csv_ready.write_csv(processed_dir / "participants.csv")
 
+        ai_dir = processed_dir / "ai"
+        ai_paths = export_prediction_sequences(runs, ai_dir)
+
         figure_paths = generate_all_figures(participants, suite, benchmarks, figures_dir)
 
         # Copy PNGs next to the markdown for viewers that prefer file links
@@ -79,7 +92,8 @@ def write_report(
             report_figure_paths[key] = dest
 
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        md_path = reports_dir / "study_analysis_report.md"
+        opposite = opposite_trait_summary(participants)
+        md_path = reports_dir / HUMAN_REPORT_MD
         md = _render_markdown(
             stamp=stamp,
             source_csv=source_csv,
@@ -89,15 +103,23 @@ def write_report(
             benchmarks=benchmarks,
             verification=verification,
             figure_paths=report_figure_paths,
+            opposite=opposite,
+            ai_dir=ai_dir,
         )
         md_path.write_text(md, encoding="utf-8")
 
         explorer_path = write_explorer_html(
             participants=participants,
             runs=runs,
-            output_path=reports_dir / "study_explorer.html",
+            output_path=reports_dir / HUMAN_EXPLORER_HTML,
             source_csv=source_csv,
+            suite=suite,
+            benchmarks=benchmarks,
+            verification=verification,
+            edition="human",
+            sequences_dir=ai_dir,
         )
+        _remove_stale_study_aliases(reports_dir)
 
         payload: dict[str, Any] = {
             "generated_at": stamp,
@@ -108,12 +130,26 @@ def write_report(
             "hypotheses": suite.to_dict(),
             "hypothesis_catalog": HYPOTHESES,
             "benchmarks": benchmarks.to_dict(),
+            "edition": "human",
             "figures": {k: str(v) for k, v in report_figure_paths.items()},
             "explorer": str(explorer_path),
+            "opposite_trait": opposite,
+            "ai_export": {k: str(v) for k, v in ai_paths.items()},
         }
-        (reports_dir / "study_analysis_report.json").write_text(
-            json.dumps(payload, indent=2, default=str),
-            encoding="utf-8",
+        json_text = json.dumps(payload, indent=2, default=str)
+        (reports_dir / HUMAN_REPORT_JSON).write_text(json_text, encoding="utf-8")
+        from sugar_data_processing.ai.report import write_ai_report
+
+        write_ai_report(
+            participants=participants,
+            runs=runs,
+            suite=suite,
+            benchmarks=benchmarks,
+            verification=verification,
+            output_dir=output_dir,
+            source_csv=source_csv,
+            comparison=None,
+            sequences_dir=ai_dir,
         )
         action.log(message_type="info", report=str(md_path), n_figures=len(figure_paths))
         return md_path
@@ -128,9 +164,12 @@ def _embed_png(path: Path, caption: str) -> str:
     # Data URI so the MD preview shows the plot without resolving paths;
     # relative link kept for exporters / GitHub-style viewers that prefer files.
     return (
-        f"![{caption}](data:image/png;base64,{encoded})\n\n"
-        f"*Figure: {caption}*  \n"
-        f"[PNG file]({rel})"
+        '<figure style="margin:0;">'
+        f'<img src="data:image/png;base64,{encoded}" alt="{escape(caption)}" '
+        f'style="width:100%;max-width:1200px;height:auto;" />'
+        f'<figcaption style="color:#475569;font-size:0.92rem;margin-top:8px;">'
+        f'{escape(caption)} · <a href="{rel}">PNG file</a></figcaption>'
+        "</figure>"
     )
 
 
@@ -165,19 +204,36 @@ def _issue_table(issues: list[Anomaly], limit: int = 80) -> str:
     return "\n".join(lines) if lines else "| — | — | — | none |"
 
 
+def _remove_stale_study_aliases(reports_dir: Path) -> None:
+    """Drop the old study_* copies; human_* is the only report now."""
+    for name in (
+        "study_analysis_report.md",
+        "study_analysis_report.json",
+        "study_explorer.html",
+    ):
+        stale = reports_dir / name
+        if stale.exists():
+            stale.unlink()
+
+
+def _pair(text_md: str, figure_html: str) -> str:
+    """Put analysis copy on the left and its figure on the right."""
+    text_html = markdown_fragment_to_html(text_md)
+    return (
+        '<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;'
+        'margin:20px 0 36px;">'
+        f'<div style="flex:1 1 340px;min-width:280px;">{text_html}</div>'
+        f'<div style="flex:1.3 1 420px;min-width:340px;">{figure_html}</div>'
+        "</div>\n"
+    )
+
+
 def _hypothesis_section(
     key: str,
     result: dict[str, Any] | None,
     figure_blocks: list[str],
 ) -> str:
-    figures = "\n\n".join(figure_blocks)
-    narrative = explain_hypothesis_result(key, result)
-    return f"""{narrative}
-
-**Figure(s)**
-
-{figures}
-"""
+    return _pair(explain_hypothesis_result(key, result), "\n".join(figure_blocks))
 
 
 def _render_markdown(
@@ -190,6 +246,8 @@ def _render_markdown(
     benchmarks: BenchmarkContext,
     verification: VerificationReport,
     figure_paths: dict[str, Path],
+    opposite: dict[str, Any],
+    ai_dir: Path,
 ) -> str:
     hyp = suite.to_dict()
     n_primary = int(participants.filter(pl.col("eligible_primary")).height)
@@ -226,17 +284,22 @@ def _render_markdown(
         for info in HYPOTHESES.values()
     )
     reading_guide = how_to_read_report()
+    edition_note = explain_edition_and_ai_path()
+    opposite_md = explain_opposite_trait(opposite)
 
-    return f"""# Sugar Sugar Study Analysis Report
+    return f"""# Sugar Sugar Human Study Analysis Report
 
 Generated: **{stamp}**  
-Source: `{source_csv}`
+Source: `{source_csv}`  
+Edition: **human** (the study analysis report, renamed)
 
 This report follows **Section 7 (Statistical Analysis Plan)** of
 *Human Prediction of Next-Hour Glucose from Prior CGM Context*.
 
 It is written so a student can follow the pipeline without reading the source code:
 what was measured, who was included, what each test asked, and what the numbers mean.
+
+{edition_note}
 
 {reading_guide}
 
@@ -256,6 +319,8 @@ and what overall prediction accuracy looks like.
 | Raw runs (rows) | {runs.height} | Completed app sessions in the export |
 | Unique participants | {participants.height} | Distinct people (`study_id`) |
 | Repeat players | {n_repeat} | People with more than one saved run |
+| Challenge the unknown | {opposite.get("n_challenge_unknown", 0)} | Opted into the opposite-corpus mix |
+| Played opposite trait | {opposite.get("n_played_opposite_trait", 0)} | At least one round on the other diabetes class |
 | Saved runs (all people) | {n_runs_total} | Sessions after counting replays |
 | Played every variant (A+B+C) | {n_all_formats} | People who tried generic, own, and mixed |
 | Eligible for primary analyses | {n_primary} | ≥6 generic segments (used for H1–H4) |
@@ -266,49 +331,88 @@ and what overall prediction accuracy looks like.
 
 {cohort_rows}
 
-{img("mae_distribution", "Distribution of per-person MAE (mg/dL)")}
+{_pair(
+    "### Who is in the cohort\n\n"
+    "Each slice is a unique person in one diabetes × CGM bucket. "
+    "This is head-count, not accuracy.",
+    img("cohort_pie", "Unique people in each diabetes × CGM category"),
+)}
 
-{img("cohort_pie", "Unique people in each diabetes × CGM category")}
+{_pair(
+    "### How accurate people were\n\n"
+    "Each tick is one person's MAE (mg/dL). Lower is better. "
+    "Look at the centre, the spread, and any far-right outliers.",
+    img("mae_distribution", "Distribution of per-person MAE (mg/dL)"),
+)}
 
-{img("mae_by_format", "Person MAE on each task: A generic, B own data, C mixed")}
+{_pair(
+    "### Accuracy on each task\n\n"
+    "A is generic traces, B is own data, C is mixed. "
+    "One point per person who played that format.",
+    img("mae_by_format", "Person MAE on each task: A generic, B own data, C mixed"),
+)}
 
-{img("players_vs_repeats", "How many people played once vs came back, and their MAE")}
+{_pair(
+    "### First-timers vs people who came back\n\n"
+    f"{n_repeat} of {participants.height} people saved more than one run. "
+    "The swarm is person MAE, not a count bar.",
+    img("players_vs_repeats", "How many people played once vs came back, and their MAE"),
+)}
 
-{img("all_formats_own_vs_generic", "People who played every variant: own-data MAE vs generic MAE")}
+{_pair(
+    "### People who tried every variant\n\n"
+    "Only players who saved A, B, and C. Below the diagonal means "
+    "better (lower MAE) on their own data than on generic traces.",
+    img("all_formats_own_vs_generic", "People who played every variant: own-data MAE vs generic MAE"),
+)}
 
-Interactive filters for the same pictures live in [`study_explorer.html`](study_explorer.html).
+{_pair(
+    "### Everyone in own vs generic space\n\n"
+    "Colour is the diabetes × CGM cohort. A dark ring means they opted "
+    "into Challenge the unknown. Missing own-data MAE falls back to person MAE.",
+    img("people_clusters", "People as points in own-vs-generic space (colour = cohort, ring = Challenge the unknown)"),
+)}
+
+Interactive filters live in [`{HUMAN_EXPLORER_HTML}`]({HUMAN_EXPLORER_HTML}).
 
 ## 2. Analysis population rules (§7.2)
 
 **Why this matters:** statistical tests only include people with enough completed
 segments. Otherwise short incomplete sessions would dominate the results.
 
-- **Primary analyses (H1–H4):** ≥6 analyzable **generic** segments.
+- **Primary analyses (H1–H4):** ≥6 analyzable **generic** segments for the
+  overall / generic layers. The own-data layer uses ≥6 own segments (relaxed
+  if that threshold is not yet met).
 - **Own-data analyses:** ≥6 **own-data** segments.
 - **Own-vs-generic paired analysis (H5):** both thresholds.
+- **Reporting order for H1–H4:** results per diabetes × CGM category first,
+  then that category split into generic data vs own data.
 - **Person-level MAE:** mean of round MAEs so one busy participant cannot inflate
   the sample size by playing many rounds.
 
 ## 3. Primary hypotheses
 
 **What these ask:** do two groups of people differ in prediction accuracy?
+Each result starts with the four diabetes × CGM categories, then splits
+generic data vs own data.
 
 {_hypothesis_section(
     "h1",
     hyp["h1"],
-    [img("mae_by_diabetes", "Person MAE by diabetes status (PwD vs non-PwD)")],
+    [img("mae_by_diabetes", "Person MAE by diabetes status, each group split into generic vs own data")],
 )}
 
 {_hypothesis_section(
     "h2",
     hyp["h2"],
-    [img("mae_by_cgm", "Person MAE by CGM use (users vs non-users)")],
+    [img("mae_by_cgm", "Person MAE by CGM use, each group split into generic vs own data")],
 )}
 
 ## 4. Secondary hypotheses
 
 **What these ask:** does longer experience help, and is accuracy better on own data
-than on generic example data?
+than on generic example data? H3 and H4 use **months** so short experience is readable.
+Both also split generic vs own MAE.
 
 {_hypothesis_section(
     "h3",
@@ -316,7 +420,7 @@ than on generic example data?
     [
         img(
             "diabetes_duration_scatter",
-            "Diabetes duration (years) vs person MAE among PwD",
+            "Diabetes duration (months) vs MAE on generic and own data among PwD",
         )
     ],
 )}
@@ -327,11 +431,7 @@ than on generic example data?
     [
         img(
             "cgm_duration_scatter",
-            "CGM experience (years) vs person MAE among CGM users",
-        ),
-        img(
-            "duration_bins",
-            "Exploratory MAE by diabetes-duration and CGM-experience bins",
+            "CGM experience (months) vs MAE on generic and own data among CGM users",
         ),
     ],
 )}
@@ -349,21 +449,30 @@ than on generic example data?
 
 {explain_hypothesis_result("h6", hyp.get("h6"))}
 
+## 4b. Challenge the unknown / opposite trait
+
+{_pair(
+    opposite_md,
+    img("opposite_trait", "Same-trait vs opposite-trait person MAE (points, not bins)"),
+)}
+
 ## 5. Literature / GlucoBench context (§7.5)
 
 **Goal of this section:** place human MAE next to published 60-minute model bands.
 This is contextual comparison, not the deferred formal H6 baseline test.
 
-{benchmarks.narrative}
-
-| Band | Range (mg/dL) | % of humans inside | How to read it |
-| --- | --- | ---: | --- |
-| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% | Typical simple forecasting models |
-| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% | Typical deep-learning reports |
-| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% | Personalized-model band |
-| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% | Better than the simple-band floor |
-
-{img("benchmark_bands", "Human MAE density vs published simple and deep-learning bands")}
+{_pair(
+    (
+        f"{benchmarks.narrative}\n\n"
+        "| Band | Range (mg/dL) | % of humans inside | How to read it |\n"
+        "| --- | --- | ---: | --- |\n"
+        f"| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% | Typical simple forecasting models |\n"
+        f"| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% | Typical deep-learning reports |\n"
+        f"| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% | Personalized-model band |\n"
+        f"| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% | Better than the simple-band floor |\n"
+    ),
+    img("benchmark_bands", "Human MAE density vs published simple and deep-learning bands"),
+)}
 
 ## 6. Data verification
 
@@ -392,8 +501,9 @@ Total issues: **{len(all_issues)}** ({verification.n_high} high, {verification.n
 
 ## 8. Machine-readable artefacts
 
-- `study_analysis_report.json` — full hypothesis payloads + catalog
-- `study_explorer.html` — filterable charts for cohort, tasks, repeats, and own vs generic
+- `{HUMAN_REPORT_JSON}` — full hypothesis payloads + catalog + opposite-trait summary
+- `{HUMAN_EXPLORER_HTML}` — interactive report (same results as this markdown)
 - `figures/` — PNG copies of every plot embedded above
 - processed participant / run tables under `processed/` (or repo `data/processed/`)
+- AI sequence export under `{ai_dir}` (`prediction_points.csv`, `prediction_rounds.csv`, `manifest.json`)
 """

@@ -6,7 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-from sugar_data_processing.config import DATA_CLASS_DIABETIC, DATA_CLASS_NONDIABETIC
+from sugar_data_processing.config import (
+    DATA_CLASS_DIABETIC,
+    DATA_CLASS_NONDIABETIC,
+    PLAYER_TRAIT_DIABETIC,
+    PLAYER_TRAIT_NONDIABETIC,
+    PLAYER_TRAIT_UNKNOWN,
+)
 from sugar_data_processing.gathering.encoding import parse_optional_bool
 
 _D1NAMO_NAME = re.compile(r"^D1NAMO-(\d{3})\.csv$", re.IGNORECASE)
@@ -89,3 +95,32 @@ def classify_data_class(
 
 def coerce_example_flag(raw: Any) -> bool | None:
     return parse_optional_bool(raw)
+
+
+def player_trait(diabetic: bool | None) -> str:
+    """Player's own diabetes trait, or ``unknown`` when the flag is blank."""
+    if diabetic is True:
+        return PLAYER_TRAIT_DIABETIC
+    if diabetic is False:
+        return PLAYER_TRAIT_NONDIABETIC
+    return PLAYER_TRAIT_UNKNOWN
+
+
+def is_opposite_trait(player: str | None, data_class: str | None) -> bool:
+    """True when this round's glucose trace is the other diabetes class than the player.
+
+    A Type-1 player on a BIG IDEAs (non-diabetic) window is opposite.
+    A non-diabetic player on a D1NAMO window is opposite.
+    Own-upload traces match the player, so they are never opposite.
+
+    This is derived from the source filename + player status. It is not the
+    Challenge-the-unknown checkbox. When we cannot classify either side,
+    the answer is False (not marked opposite).
+    """
+    if player is None or data_class is None:
+        return False
+    if player == PLAYER_TRAIT_UNKNOWN:
+        return False
+    if data_class not in {DATA_CLASS_DIABETIC, DATA_CLASS_NONDIABETIC}:
+        return False
+    return player != data_class

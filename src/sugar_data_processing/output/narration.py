@@ -92,6 +92,63 @@ def _fmt_p(value: Any) -> str:
     return str(value)
 
 
+def _fmt_mae(value: Any) -> str:
+    if isinstance(value, (int, float)):
+        return f"{value:.2f}"
+    return "—"
+
+
+def _category_prediction_table(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "**Prediction by category** — head-count first, then each bucket split "
+        "into generic-data MAE and own-data MAE (mg/dL, lower is better).\n",
+        "",
+        "| Category | People | Overall MAE | Generic MAE (n) | Own MAE (n) |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        if int(row.get("n") or 0) == 0:
+            continue
+        n_generic = int(row.get("n_generic") or 0)
+        n_own = int(row.get("n_own") or 0)
+        lines.append(
+            f"| {row.get('label', row.get('category'))} | {row.get('n')} | "
+            f"{_fmt_mae(row.get('mean_mae_primary'))} | "
+            f"{_fmt_mae(row.get('mean_mae_generic'))} ({n_generic}) | "
+            f"{_fmt_mae(row.get('mean_mae_own'))} ({n_own}) |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _layer_result_block(title: str, result: dict[str, Any] | None) -> str:
+    if result is None:
+        return f"**{title}:** not run (usually because too few eligible participants).\n"
+    significant = bool(result.get("significant"))
+    sig_txt = (
+        "Yes — statistically significant at α = 0.05."
+        if significant
+        else "No — not statistically significant at α = 0.05."
+    )
+    body = (
+        f"**{title}**\n\n"
+        f"- Test used: `{result.get('test_used')}`\n"
+        f"- Sample size: {_n_label(result)}\n"
+        f"- p-value: {_fmt_p(result.get('p_value'))}\n"
+        f"- Significant?: {sig_txt}\n"
+    )
+    if isinstance(result.get("effect_size"), (int, float)):
+        body += (
+            f"- Effect size ({result.get('effect_size_name')}): "
+            f"{result['effect_size']:.3f}\n"
+        )
+    if isinstance(result.get("coefficient"), (int, float)):
+        body += f"- Correlation: {result['coefficient']:.3f}\n"
+    interpretation = result.get("interpretation")
+    if interpretation:
+        body += f"- Takeaway: {interpretation}\n"
+    return body
+
+
 def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
     info = HYPOTHESES[key]
     header = (
@@ -103,13 +160,29 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
     )
     if key == "h6":
         return header + (
-            "**Status:** deferred. Computational baselines are not available yet, "
-            "so this comparison is not run in the current pipeline.\n"
+            "**Status:** deferred in the **human** edition. Saved game sequences "
+            "are exported so models can be scored **post factum**. The **AI** "
+            "edition will show the comparison once `sdp ingest-ai` has model "
+            "output. In-place scoring (during the live game) is not collected yet.\n"
         )
     if result is None:
         return header + (
             "**Result:** not run (usually because too few eligible participants).\n"
         )
+
+    if isinstance(result.get("by_category"), list):
+        parts = [header, _category_prediction_table(result["by_category"]), "\n"]
+        parts.append(
+            _layer_result_block(
+                "Category comparison (person MAE)",
+                result.get("overall") if result.get("overall") is not None else result,
+            )
+        )
+        parts.append("\n")
+        parts.append(_layer_result_block("On generic data", result.get("generic")))
+        parts.append("\n")
+        parts.append(_layer_result_block("On own data", result.get("own")))
+        return "".join(parts)
 
     significant = bool(result.get("significant"))
     sig_txt = (
@@ -190,6 +263,47 @@ def explain_report_written(report_path: Path) -> str:
     )
 
 
+def explain_edition_and_ai_path() -> str:
+    return (
+        "This file is the **human** edition of the study analysis. The same "
+        "numbers are also rendered in `human_explorer.html`. A companion **AI** "
+        "edition (`ai_analysis_report.md` / `ai_explorer.html`) will carry every "
+        "trait of this report and add human-vs-model comparison once scored "
+        "predictions are ingested.\n\n"
+        "AI processing is split on purpose:\n"
+        "1. **Export** (done with this pipeline) — write one row per glucose "
+        "point (`timestamp`, `real_mgdl`, `human_predicted_mgdl`, window "
+        "location) so models can replay saved games **post factum**.\n"
+        "2. **Ingest** — take already-scored model CSVs and display them. "
+        "Two evaluation categories exist: `post_factum` (what we have now) and "
+        "`in_place` (scored during the live game; not collected yet)."
+    )
+
+
+def explain_opposite_trait(summary: dict[str, Any]) -> str:
+    same = summary.get("mean_mae_same_trait")
+    opp = summary.get("mean_mae_opposite_trait")
+    same_txt = f"{same:.2f}" if isinstance(same, (int, float)) else "—"
+    opp_txt = f"{opp:.2f}" if isinstance(opp, (int, float)) else "—"
+    return (
+        "### Challenge the unknown / opposite trait\n\n"
+        "Default Format A routing follows the player's own diabetes class "
+        "(Type 1 → D1NAMO diabetic traces, non-PwD → BIG IDEAs). "
+        "**Challenge the unknown** opts that person into a 50/50 mix with the "
+        "*opposite* corpus. Type 2 / mixed policies can also land opposite-class "
+        "traces without the checkbox. Both cases set `is_opposite_trait` on the "
+        "round.\n\n"
+        f"- People who opted into Challenge the unknown: **{summary.get('n_challenge_unknown', 0)}**\n"
+        f"- People who actually played at least one opposite-trait round: "
+        f"**{summary.get('n_played_opposite_trait', 0)}**\n"
+        f"- Mean person MAE on same-trait traces: **{same_txt} mg/dL** "
+        f"(n={summary.get('n_with_same_trait_mae', 0)})\n"
+        f"- Mean person MAE on opposite-trait traces: **{opp_txt} mg/dL** "
+        f"(n={summary.get('n_with_opposite_trait_mae', 0)})\n"
+        f"- People with scores on both sides: **{summary.get('n_with_both_sides', 0)}**\n"
+    )
+
+
 def how_to_read_report() -> str:
     return (
         "## How to read this report\n\n"
@@ -197,10 +311,15 @@ def how_to_read_report() -> str:
         "1. **Cohort snapshot** — who is in the analysis, the four diabetes × CGM "
         "buckets, task performance, and repeats.\n"
         "2. **Population rules** — who counts for each test (eligibility thresholds).\n"
-        "3. **Primary hypotheses** — group comparisons (diabetes status, CGM use).\n"
-        "4. **Secondary hypotheses** — experience correlations and own vs generic data.\n"
+        "3. **Primary hypotheses** — group comparisons (diabetes status, CGM use). "
+        "Each one starts with the four categories, then splits generic vs own data.\n"
+        "4. **Secondary hypotheses** — experience correlations (H3 in months) "
+        "and own vs generic data, again category-first then by data source.\n"
         "5. **Literature context** — human MAE vs published model bands.\n"
         "6. **Verification** — data-quality checks you should not skip.\n\n"
-        "There is also an interactive `study_explorer.html` next to this file.\n\n"
+        "Each figure sits next to the paragraph it belongs to, not in a gallery "
+        "at the end. There is also an interactive `human_explorer.html` next to "
+        "this file (this markdown is the **human** edition; an **AI** edition "
+        "will be written after models are ingested).\n\n"
         f"{STATS_GLOSSARY}\n"
     )

@@ -9,11 +9,17 @@ from eliot import start_action
 
 from sugar_data_processing.config import FORMAT_GENERIC, FORMAT_MIXED, FORMAT_OWN
 from sugar_data_processing.gathering.encoding import (
+    as_strict_bool,
     parse_optional_bool,
     parse_per_round_metrics,
     parse_round_context,
 )
-from sugar_data_processing.gathering.sources import classify_data_class, redact_source_name
+from sugar_data_processing.gathering.sources import (
+    classify_data_class,
+    is_opposite_trait,
+    player_trait,
+    redact_source_name,
+)
 
 
 def classify_source(
@@ -117,6 +123,14 @@ def build_round_table(runs: pl.DataFrame) -> pl.DataFrame:
             "data_source_name": pl.Utf8,
             "is_example_data": pl.Boolean,
             "data_class": pl.Utf8,
+            "player_trait": pl.Utf8,
+            "is_opposite_trait": pl.Boolean,
+            "challenge_unknown": pl.Boolean,
+            "generic_slice_key": pl.Utf8,
+            "window_start_index": pl.Int64,
+            "window_start_time": pl.Utf8,
+            "prediction_start_time": pl.Utf8,
+            "window_end_time": pl.Utf8,
             "mae": pl.Float64,
             "rmse": pl.Float64,
             "mape": pl.Float64,
@@ -126,13 +140,7 @@ def build_round_table(runs: pl.DataFrame) -> pl.DataFrame:
             action.log(message_type="info", n_rounds=0)
             return pl.DataFrame(schema=schema)
 
-        rounds = pl.DataFrame(rows).with_columns(
-            pl.col("round_number").cast(pl.Int64),
-            pl.col("mae").cast(pl.Float64),
-            pl.col("rmse").cast(pl.Float64),
-            pl.col("mape").cast(pl.Float64),
-            pl.col("mse").cast(pl.Float64),
-        )
+        rounds = pl.DataFrame(rows, schema=schema)
         action.log(message_type="info", n_rounds=rounds.height)
         return rounds
 
@@ -161,6 +169,24 @@ def _round_row(
         item.get("data_source_name") or context.get("data_source_name") or run_source
     )
     source = classify_source(str(record.get("format") or ""), is_example, round_number)
+    data_class = classify_data_class(
+        source_name,
+        is_example=is_example,
+        player_diabetic=player_diabetic,
+    )
+    trait = player_trait(player_diabetic)
+    window_index = (
+        context.get("prediction_window_start_index")
+        if context.get("prediction_window_start_index") is not None
+        else item.get("prediction_window_start_index")
+    )
+    try:
+        window_index_int = int(window_index) if window_index is not None and str(window_index) != "" else None
+    except (TypeError, ValueError):
+        window_index_int = None
+    challenge = as_strict_bool(record.get("challenge_unknown"), default=False)
+    slice_key = item.get("generic_slice_key") or context.get("generic_slice_key") or ""
+    resolved_example = is_example if is_example is not None else source == "generic"
     return {
         "study_id": record["study_id"],
         "run_id": record["run_id"],
@@ -168,12 +194,16 @@ def _round_row(
         "round_number": round_number,
         "source": source,
         "data_source_name": source_name,
-        "is_example_data": is_example,
-        "data_class": classify_data_class(
-            source_name,
-            is_example=is_example,
-            player_diabetic=player_diabetic,
-        ),
+        "is_example_data": resolved_example,
+        "data_class": data_class or "",
+        "player_trait": trait,
+        "is_opposite_trait": is_opposite_trait(trait, data_class),
+        "challenge_unknown": challenge,
+        "generic_slice_key": str(slice_key) if slice_key else "",
+        "window_start_index": window_index_int,
+        "window_start_time": str(context.get("window_start_time") or ""),
+        "prediction_start_time": str(context.get("prediction_start_time") or ""),
+        "window_end_time": str(context.get("window_end_time") or ""),
         "mae": float(mae) if mae is not None else None,
         "rmse": float(rmse) if rmse is not None else None,
         "mape": float(mape) if mape is not None else None,

@@ -9,6 +9,7 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.gathering.encoding import (
+    as_strict_bool,
     cgm_duration_to_years,
     parse_duration_years,
     parse_optional_bool,
@@ -109,14 +110,21 @@ def load_prediction_statistics(path: Path | str) -> pl.DataFrame:
                 )
             )
 
-        bool_cols = [
+        optional_bool_cols = [
             c
-            for c in ("is_example_data", "uses_cgm", "diabetic", "challenge_unknown", "paper_mention")
+            for c in ("is_example_data", "uses_cgm", "diabetic", "paper_mention")
             if c in df.columns
         ]
-        for col in bool_cols:
+        for col in optional_bool_cols:
             parsed = [parse_optional_bool(v) for v in df[col].to_list()]
             df = df.with_columns(pl.Series(col, parsed, dtype=pl.Boolean))
+
+        # Feature did not exist on older exports: missing / blank means they did not opt in.
+        if "challenge_unknown" in df.columns:
+            challenge = [as_strict_bool(v, default=False) for v in df["challenge_unknown"].to_list()]
+            df = df.with_columns(pl.Series("challenge_unknown", challenge, dtype=pl.Boolean))
+        else:
+            df = df.with_columns(pl.lit(False).alias("challenge_unknown"))
 
         if "cgm_duration_years" in df.columns:
             years = [cgm_duration_to_years(v) for v in df["cgm_duration_years"].to_list()]

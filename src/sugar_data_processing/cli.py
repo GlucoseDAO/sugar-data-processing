@@ -5,21 +5,33 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import polars as pl
 import typer
 from eliot import to_file
 from pycomfort.logging import to_nice_file, to_nice_stdout
 from rich.console import Console
 
+from sugar_data_processing.ai.export import export_prediction_sequences
+from sugar_data_processing.ai.ingest import ingest_model_predictions
+from sugar_data_processing.ai.report import write_ai_report
+from sugar_data_processing.ai.sequences import build_point_table
 from sugar_data_processing.config import (
+    DEFAULT_AI_DIR,
     DEFAULT_FIXTURE_CSV,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_RAW_CSV,
     DEFAULT_SIBLING_STATS,
+    EVALUATION_MODE_POST_FACTUM,
     REPO_ROOT,
 )
+from sugar_data_processing.comparison.benchmarks import benchmark_context
 from sugar_data_processing.fetch import fetch_statistics, load_repo_dotenv
 from sugar_data_processing.fixtures.synthetic import write_synthetic_csv
+from sugar_data_processing.gathering.load import load_prediction_statistics
+from sugar_data_processing.gathering.participants import build_participant_table
 from sugar_data_processing.pipeline import run_analysis
+from sugar_data_processing.statistics.hypotheses import run_all_hypotheses
+from sugar_data_processing.verification.report import verify_dataset
 
 app = typer.Typer(
     name="sugar-data-processing",
@@ -75,7 +87,7 @@ def analyze(
         help="Use bundled synthetic fixture instead of --csv / data/raw",
     ),
 ) -> None:
-    """Gather → verify → test H1–H5 → compare → write markdown report and HTML explorer."""
+    """Gather → verify → test H1–H5 → compare → write human report, HTML, and AI sequence export."""
     _configure_logging()
     if use_fixture:
         csv_path = DEFAULT_FIXTURE_CSV
@@ -223,6 +235,112 @@ def make_fixture(
     """Generate a synthetic statistics CSV that exercises H1–H5."""
     written = write_synthetic_csv(path, n_participants=n_participants, seed=seed)
     console.print(f"[green]Wrote fixture:[/green] {written}")
+
+
+def _resolve_csv(csv: Path | None, use_fixture: bool) -> Path:
+    if use_fixture:
+        csv_path = DEFAULT_FIXTURE_CSV
+        if not csv_path.exists():
+            write_synthetic_csv(csv_path)
+        return csv_path
+    if csv is not None:
+        return csv
+    if DEFAULT_RAW_CSV.exists():
+        return DEFAULT_RAW_CSV
+    if DEFAULT_FIXTURE_CSV.exists():
+        console.print(
+            f"[yellow]No raw CSV at {DEFAULT_RAW_CSV}; falling back to fixture.[/yellow]"
+        )
+        return DEFAULT_FIXTURE_CSV
+    console.print(
+        "[red]No input CSV found.[/red] Pass --csv, place a file at "
+        f"{DEFAULT_RAW_CSV}, or use --fixture."
+    )
+    raise typer.Exit(code=1)
+
+
+@app.command("export-ai")
+def export_ai(
+    csv: Optional[Path] = typer.Option(None, "--csv", help="prediction_statistics.csv"),
+    dest: Path = typer.Option(DEFAULT_AI_DIR, "--dest", help="Directory for sequence CSVs"),
+    use_fixture: bool = typer.Option(False, "--fixture", help="Use bundled synthetic fixture"),
+    evaluation_mode: str = typer.Option(
+        EVALUATION_MODE_POST_FACTUM,
+        "--mode",
+        help="Tag written on every row: post_factum (default) or in_place",
+    ),
+) -> None:
+    """Write per-player, per-game glucose sequences for post-factum model scoring."""
+    _configure_logging()
+    csv_path = _resolve_csv(csv, use_fixture)
+    if not csv_path.exists():
+        console.print(f"[red]CSV not found:[/red] {csv_path}")
+        raise typer.Exit(code=1)
+    runs = load_prediction_statistics(csv_path)
+    paths = export_prediction_sequences(runs, dest, evaluation_mode=evaluation_mode)
+    console.print(f"[green]Wrote AI sequences to[/green] {dest}")
+    for key, path in paths.items():
+        console.print(f"  {key}: {path}")
+
+
+@app.command("ingest-ai")
+def ingest_ai(
+    predictions: Path = typer.Option(
+        ...,
+        "--predictions",
+        help="Model output CSV (study_id, run_id, round_number, point_index, model_name, model_predicted_mgdl)",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+    ),
+    csv: Optional[Path] = typer.Option(None, "--csv", help="Original prediction_statistics.csv"),
+    sequences: Path = typer.Option(
+        DEFAULT_AI_DIR / "prediction_points.csv",
+        "--sequences",
+        help="Exported prediction_points.csv (or rebuild from --csv)",
+    ),
+    output: Path = typer.Option(DEFAULT_OUTPUT_DIR, "--output", "-o"),
+    use_fixture: bool = typer.Option(False, "--fixture"),
+) -> None:
+    """Join already-scored model predictions and write the AI edition of the report."""
+    _configure_logging()
+    csv_path = _resolve_csv(csv, use_fixture)
+    if not csv_path.exists():
+        console.print(f"[red]CSV not found:[/red] {csv_path}")
+        raise typer.Exit(code=1)
+    runs = load_prediction_statistics(csv_path)
+    participants = build_participant_table(runs)
+    if sequences.exists():
+        points = pl.read_csv(sequences, infer_schema_length=10_000)
+    else:
+        console.print("[yellow]Sequence CSV missing; rebuilding from the study export.[/yellow]")
+        points = build_point_table(runs)
+    scored, comparison = ingest_model_predictions(points, predictions)
+    scored_path = DEFAULT_AI_DIR if output.name == "output" else output / "processed" / "ai"
+    scored_path.mkdir(parents=True, exist_ok=True)
+    scored.write_csv(scored_path / "model_scores.csv")
+    suite = run_all_hypotheses(participants)
+    eligible = participants.filter(pl.col("eligible_primary"))
+    bench_frame = eligible if eligible.height > 0 else participants
+    benchmarks = benchmark_context(bench_frame, mae_col="mae_primary")
+    verification = verify_dataset(runs, participants)
+    report_path = write_ai_report(
+        participants=participants,
+        runs=runs,
+        suite=suite,
+        benchmarks=benchmarks,
+        verification=verification,
+        output_dir=output,
+        source_csv=csv_path,
+        comparison=comparison,
+        scored_points=scored,
+        sequences_dir=sequences.parent,
+    )
+    console.print(f"[green]AI report written:[/green] {report_path}")
+    console.print(
+        f"Scored points: {comparison.n_points} | models: {', '.join(comparison.models) or 'none'} | "
+        f"modes: {', '.join(comparison.evaluation_modes) or 'none'}"
+    )
 
 
 if __name__ == "__main__":

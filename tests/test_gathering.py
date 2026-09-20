@@ -14,9 +14,12 @@ from sugar_data_processing.gathering import (
     cgm_duration_to_years,
     classify_data_class,
     classify_source,
+    is_opposite_trait,
     load_prediction_statistics,
     parse_cgm_duration,
+    player_trait,
     redact_source_name,
+    years_to_months,
 )
 
 
@@ -27,6 +30,8 @@ def test_cgm_duration_value_unit() -> None:
     assert cgm_duration_to_years(2) == 2.0
     assert cgm_duration_to_years("") is None
     assert cgm_duration_to_years(None) is None
+    assert years_to_months(2.0) == 24.0
+    assert years_to_months(None) is None
 
 
 def test_classify_source_prefers_per_round_flag() -> None:
@@ -36,6 +41,15 @@ def test_classify_source_prefers_per_round_flag() -> None:
     assert classify_source("C", None, 2) == "own"
     assert classify_source("A", None, 1) == "generic"
     assert classify_source("B", None, 1) == "own"
+
+
+def test_opposite_trait_field() -> None:
+    assert player_trait(True) == "diabetic"
+    assert player_trait(False) == "nondiabetic"
+    assert player_trait(None) == "unknown"
+    assert is_opposite_trait("diabetic", "nondiabetic") is True
+    assert is_opposite_trait("diabetic", "diabetic") is False
+    assert is_opposite_trait("unknown", "diabetic") is False
 
 
 def test_redact_and_data_class() -> None:
@@ -69,9 +83,38 @@ def test_latest_export_columns_round_trip(tmp_path: Path) -> None:
     assert "cohort_category" in people.columns
     assert "played_all_formats" in people.columns
     assert "is_repeat_player" in people.columns
+    assert "played_challenge_unknown" in people.columns
+    assert "played_opposite_trait" in people.columns
+    assert "mae_same_trait" in people.columns
+    assert "mae_opposite_trait" in people.columns
+    assert "diabetes_duration_months" in people.columns
+    assert "cgm_duration_months" in people.columns
     assert people.filter(pl.col("cohort_category") == COHORT_DIABETIC_CGM).height > 0
     assert people.filter(pl.col("played_all_formats")).height > 0
     assert people.filter(pl.col("is_repeat_player")).height > 0
+    assert people.filter(pl.col("played_challenge_unknown")).height > 0
+    assert people.filter(pl.col("played_opposite_trait")).height > 0
+    assert {"player_trait", "is_opposite_trait", "challenge_unknown"} <= set(rounds.columns)
+    assert rounds["challenge_unknown"].null_count() == 0
+    assert rounds["is_opposite_trait"].null_count() == 0
+
+
+def test_blank_challenge_unknown_is_false(tmp_path: Path) -> None:
+    csv_path = tmp_path / "stats.csv"
+    write_synthetic_csv(csv_path, n_participants=8, seed=2)
+    raw = pl.read_csv(csv_path)
+    challenge = ["" if i == 0 else "false" if i == 1 else "true" for i in range(raw.height)]
+    raw = raw.with_columns(pl.Series("challenge_unknown", challenge))
+    raw.write_csv(csv_path)
+    runs = load_prediction_statistics(csv_path)
+    assert runs["challenge_unknown"].null_count() == 0
+    assert runs["challenge_unknown"][0] == False
+    assert runs["challenge_unknown"][1] == False
+    assert runs["challenge_unknown"][2] == True
+    rounds = build_round_table(runs)
+    assert rounds["challenge_unknown"].null_count() == 0
+    assert rounds["is_opposite_trait"].null_count() == 0
+    assert rounds["is_example_data"].null_count() == 0
 
 
 def test_blank_diabetic_stays_unknown(tmp_path: Path) -> None:

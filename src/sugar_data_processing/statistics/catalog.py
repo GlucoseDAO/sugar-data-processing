@@ -25,11 +25,15 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
             "Do people with diabetes (PwD) predict next-hour glucose more accurately "
             "than people without diabetes?"
         ),
-        "groups_or_predictors": "PwD vs non-PwD (`diabetic`)",
+        "groups_or_predictors": (
+            "First the four diabetes × CGM categories, then PwD vs non-PwD "
+            "(`diabetic`) on overall, generic, and own MAE"
+        ),
         "outcome": "Person-level MAE in mg/dL (lower is better)",
         "method": (
             "Shapiro–Wilk normality check, then independent t-test if normal, "
-            "otherwise Mann–Whitney U. α = 0.05."
+            "otherwise Mann–Whitney U. Repeat on generic-data MAE and own-data MAE. "
+            "α = 0.05."
         ),
         "section": "§7.3 primary",
     },
@@ -40,11 +44,14 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
             "Do continuous glucose monitor (CGM) users predict next-hour glucose "
             "more accurately than people who do not use CGM?"
         ),
-        "groups_or_predictors": "CGM users vs non-CGM (`uses_cgm`)",
+        "groups_or_predictors": (
+            "First the four diabetes × CGM categories, then CGM users vs non-CGM "
+            "(`uses_cgm`) on overall, generic, and own MAE"
+        ),
         "outcome": "Person-level MAE in mg/dL (lower is better)",
         "method": (
             "Same path as H1: Shapiro–Wilk → independent t-test or Mann–Whitney U. "
-            "α = 0.05."
+            "Repeat on generic-data MAE and own-data MAE. α = 0.05."
         ),
         "section": "§7.3 primary",
     },
@@ -55,11 +62,15 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
             "Among people with diabetes, is longer diabetes duration associated "
             "with better (lower) prediction MAE?"
         ),
-        "groups_or_predictors": "Diabetes duration in years (PwD only)",
+        "groups_or_predictors": (
+            "First the four diabetes × CGM categories, then diabetes duration "
+            "in months (PwD only) vs overall, generic, and own MAE"
+        ),
         "outcome": "Person-level MAE in mg/dL",
         "method": (
             "Pearson correlation if assumptions hold, otherwise Spearman; "
-            "plus exploratory linear vs log fits. α = 0.05."
+            "plus exploratory linear vs log fits. Duration is measured in months "
+            "so short experience is readable. Repeat on generic and own MAE. α = 0.05."
         ),
         "section": "§7.4 secondary",
     },
@@ -70,11 +81,15 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
             "Among CGM users, is longer CGM experience associated with better "
             "(lower) prediction MAE?"
         ),
-        "groups_or_predictors": "CGM experience in years (CGM users only)",
+        "groups_or_predictors": (
+            "First the four diabetes × CGM categories, then CGM experience "
+            "in months (CGM users only) vs overall, generic, and own MAE"
+        ),
         "outcome": "Person-level MAE in mg/dL",
         "method": (
             "Same approach as H3: Pearson or Spearman plus exploratory linear/log fits. "
-            "α = 0.05."
+            "Experience is measured in months so short use is readable. "
+            "Repeat on generic and own MAE. α = 0.05."
         ),
         "section": "§7.4 secondary",
     },
@@ -104,8 +119,11 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
         ),
         "groups_or_predictors": "Human MAE vs model MAE (same segments)",
         "outcome": "Person- or segment-level MAE in mg/dL",
-        "method": "Deferred until baselines are implemented in sugar-sugar.",
-        "section": "§7.4 deferred",
+        "method": (
+            "Deferred in the human edition. Sequences are exported for post-factum "
+            "scoring; the AI edition ingests model CSVs and compares them here."
+        ),
+        "section": "§7.4 / AI edition",
     },
 }
 

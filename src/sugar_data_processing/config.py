@@ -36,6 +36,36 @@ COHORT_LABELS: dict[str, str] = {
 DATA_CLASS_DIABETIC: str = "diabetic"
 DATA_CLASS_NONDIABETIC: str = "nondiabetic"
 
+# Player diabetes trait (same vocabulary as data_class so they can be compared)
+PLAYER_TRAIT_DIABETIC: str = "diabetic"
+PLAYER_TRAIT_NONDIABETIC: str = "nondiabetic"
+PLAYER_TRAIT_UNKNOWN: str = "unknown"
+
+TRAIT_LABELS: dict[str, str] = {
+    PLAYER_TRAIT_DIABETIC: "Diabetic",
+    PLAYER_TRAIT_NONDIABETIC: "Non-diabetic",
+    PLAYER_TRAIT_UNKNOWN: "Unknown",
+}
+
+# Challenge the unknown: player opted into the opposite-corpus mix (formats A/C)
+CHALLENGE_UNKNOWN_LABEL: str = "Challenge the unknown"
+
+# AI evaluation timing. Current study games are scored after the fact.
+EVALUATION_MODE_POST_FACTUM: str = "post_factum"
+EVALUATION_MODE_IN_PLACE: str = "in_place"
+EVALUATION_MODE_LABELS: dict[str, str] = {
+    EVALUATION_MODE_POST_FACTUM: "Post factum (replay saved games)",
+    EVALUATION_MODE_IN_PLACE: "In place (scored during the game)",
+}
+
+# Report edition filenames (human is the current deliverable; AI is the follow-on)
+HUMAN_REPORT_MD: str = "human_analysis_report.md"
+HUMAN_REPORT_JSON: str = "human_analysis_report.json"
+HUMAN_EXPLORER_HTML: str = "human_explorer.html"
+AI_REPORT_MD: str = "ai_analysis_report.md"
+AI_REPORT_JSON: str = "ai_analysis_report.json"
+AI_EXPLORER_HTML: str = "ai_explorer.html"
+
 # GlucoBench / literature MAE bands for 60-minute horizon (mg/dL)
 SIMPLE_BASELINE_MAE_RANGE: tuple[float, float] = (12.0, 20.0)
 DEEP_LEARNING_MAE_RANGE: tuple[float, float] = (11.0, 17.0)
@@ -74,3 +104,5 @@ DEFAULT_SIBLING_STATS: Path = (
 DEFAULT_OUTPUT_DIR: Path = REPO_ROOT / "output"
 DEFAULT_REPORTS_DIR: Path = DEFAULT_OUTPUT_DIR / "reports"
 DEFAULT_FIGURES_DIR: Path = DEFAULT_OUTPUT_DIR / "figures"
+DEFAULT_PROCESSED_DIR: Path = REPO_ROOT / "data" / "processed"
+DEFAULT_AI_DIR: Path = DEFAULT_PROCESSED_DIR / "ai"

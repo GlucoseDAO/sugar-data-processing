@@ -12,14 +12,14 @@ from eliot import start_action
 
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
 from sugar_data_processing.config import (
-    CGM_DURATION_BINS,
     COHORT_DIABETIC_CGM,
     COHORT_DIABETIC_NON_CGM,
     COHORT_LABELS,
     COHORT_NONDIABETIC_CGM,
     COHORT_NONDIABETIC_NON_CGM,
     DEEP_LEARNING_MAE_RANGE,
-    DIABETES_DURATION_BINS,
+    MAX_PLAUSIBLE_CGM_YEARS,
+    MAX_PLAUSIBLE_DIABETES_YEARS,
     SIMPLE_BASELINE_MAE_RANGE,
 )
 from sugar_data_processing.statistics.hypotheses import HypothesisSuite
@@ -30,18 +30,9 @@ sns.set_theme(style="whitegrid", context="talk")
 def _save(fig: plt.Figure, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
     return path
-
-
-def _duration_bin(value: float | None, bins: list[tuple[str, float, float]]) -> str | None:
-    if value is None or not np.isfinite(value):
-        return None
-    for label, lo, hi in bins:
-        if lo <= value < hi:
-            return label
-    return bins[-1][0]
 
 
 def generate_all_figures(
@@ -57,32 +48,41 @@ def generate_all_figures(
         paths["mae_by_diabetes"] = _plot_group_mae(
             participants,
             "diabetic",
-            "Diabetes status vs person MAE (PwD vs non-PwD)",
+            "Diabetes status vs MAE, each group split into generic vs own",
             figures_dir / "h1_mae_by_diabetes.png",
+            yes_label="PwD",
+            no_label="non-PwD",
         )
         paths["mae_by_cgm"] = _plot_group_mae(
             participants,
             "uses_cgm",
-            "CGM use vs person MAE (users vs non-users)",
+            "CGM use vs MAE, each group split into generic vs own",
             figures_dir / "h2_mae_by_cgm.png",
+            yes_label="CGM user",
+            no_label="no CGM",
         )
         paths["diabetes_duration_scatter"] = _plot_duration_scatter(
             participants,
-            x_col="diabetes_duration",
-            title="Diabetes duration vs person MAE (PwD only)",
-            xlabel="Diabetes duration (years)",
+            x_col="diabetes_duration_months",
+            title="Diabetes duration vs MAE on generic and own data (PwD only)",
+            xlabel="Diabetes duration (months)",
             path=figures_dir / "h3_diabetes_duration_scatter.png",
             diabetic_only=True,
         )
         paths["cgm_duration_scatter"] = _plot_duration_scatter(
             participants,
-            x_col="cgm_duration_years",
-            title="CGM experience vs person MAE (CGM users only)",
-            xlabel="CGM experience (years)",
+            x_col="cgm_duration_months",
+            title="CGM experience vs MAE on generic and own data (CGM users only)",
+            xlabel="CGM experience (months)",
             path=figures_dir / "h4_cgm_duration_scatter.png",
             cgm_only=True,
         )
-        paths["duration_bins"] = _plot_duration_bins(participants, figures_dir / "h3_h4_duration_bins.png")
+        paths["people_clusters"] = _plot_people_clusters(
+            participants, figures_dir / "people_clusters.png"
+        )
+        paths["opposite_trait"] = _plot_opposite_trait(
+            participants, figures_dir / "opposite_trait.png"
+        )
         paths["own_vs_generic"] = _plot_own_vs_generic(
             participants, figures_dir / "h5_own_vs_generic.png"
         )
@@ -108,30 +108,77 @@ def generate_all_figures(
         return paths
 
 
-def _plot_group_mae(participants: pl.DataFrame, group_col: str, title: str, path: Path) -> Path:
-    df = participants.filter(pl.col("mae_primary").is_not_null()).filter(pl.col(group_col).is_not_null())
-    fig, ax = plt.subplots(figsize=(8, 5))
-    if df.height == 0:
+def _plot_group_mae(
+    participants: pl.DataFrame,
+    group_col: str,
+    title: str,
+    path: Path,
+    *,
+    yes_label: str,
+    no_label: str,
+) -> Path:
+    """Category on the x-axis, each category split into generic vs own MAE."""
+    fig, ax = plt.subplots(figsize=(12, 7.5))
+    if group_col not in participants.columns:
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         ax.set_axis_off()
         return _save(fig, path)
 
     labels: list[str] = []
+    sources: list[str] = []
     values: list[float] = []
-    for row in df.iter_rows(named=True):
-        raw = row[group_col]
+    for row in participants.iter_rows(named=True):
+        raw = row.get(group_col)
         if raw is True:
-            labels.append("Yes")
+            group = yes_label
         elif raw is False:
-            labels.append("No")
+            group = no_label
         else:
-            labels.append(str(raw))
-        values.append(float(row["mae_primary"]))
-    sns.boxplot(x=labels, y=values, ax=ax, color="#4C78A8")
-    sns.stripplot(x=labels, y=values, ax=ax, color="#333333", alpha=0.55, size=5)
+            continue
+        for source, col in (("generic", "mae_generic"), ("own", "mae_own")):
+            mae = row.get(col)
+            if mae is None or not np.isfinite(mae):
+                continue
+            labels.append(group)
+            sources.append(source)
+            values.append(float(mae))
+
+    if not values:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    order = [yes_label, no_label]
+    palette = {"generic": "#4C78A8", "own": "#54A24B"}
+    sns.violinplot(
+        x=labels,
+        y=values,
+        hue=sources,
+        order=order,
+        hue_order=["generic", "own"],
+        palette=palette,
+        ax=ax,
+        inner=None,
+        cut=0,
+        dodge=True,
+    )
+    sns.swarmplot(
+        x=labels,
+        y=values,
+        hue=sources,
+        order=order,
+        hue_order=["generic", "own"],
+        palette={"generic": "#1e293b", "own": "#1e293b"},
+        ax=ax,
+        size=4,
+        alpha=0.75,
+        dodge=True,
+        legend=False,
+    )
     ax.set_title(title)
-    ax.set_xlabel(group_col.replace("_", " ").title())
+    ax.set_xlabel("Category")
     ax.set_ylabel("Person MAE (mg/dL)")
+    ax.legend(title="Data source", fontsize=10)
     return _save(fig, path)
 
 
@@ -145,85 +192,144 @@ def _plot_duration_scatter(
     diabetic_only: bool = False,
     cgm_only: bool = False,
 ) -> Path:
-    df = participants.filter(pl.col("mae_primary").is_not_null()).filter(pl.col(x_col).is_not_null())
+    df = participants
+    if x_col == "diabetes_duration_months" and x_col not in df.columns and "diabetes_duration" in df.columns:
+        df = df.with_columns((pl.col("diabetes_duration") * 12.0).alias("diabetes_duration_months"))
+    if x_col == "cgm_duration_months" and x_col not in df.columns and "cgm_duration_years" in df.columns:
+        df = df.with_columns((pl.col("cgm_duration_years") * 12.0).alias("cgm_duration_months"))
     if diabetic_only:
         df = df.filter(pl.col("diabetic") == True)  # noqa: E712
     if cgm_only:
         df = df.filter(pl.col("uses_cgm") == True)  # noqa: E712
-    fig, ax = plt.subplots(figsize=(8, 5))
-    if df.height == 0:
+    if x_col == "diabetes_duration_months" and x_col in df.columns:
+        df = df.filter(pl.col(x_col) <= MAX_PLAUSIBLE_DIABETES_YEARS * 12.0)
+    if x_col == "cgm_duration_months" and x_col in df.columns:
+        df = df.filter(pl.col(x_col) <= MAX_PLAUSIBLE_CGM_YEARS * 12.0)
+    fig, ax = plt.subplots(figsize=(12, 7.5))
+    plotted = 0
+    series = (
+        ("generic", "mae_generic", "#4C78A8"),
+        ("own", "mae_own", "#54A24B"),
+    )
+    for label, y_col, color in series:
+        if x_col not in df.columns or y_col not in df.columns:
+            continue
+        sub = df.filter(pl.col(x_col).is_not_null() & pl.col(y_col).is_not_null())
+        if sub.height == 0:
+            continue
+        x = sub[x_col].to_numpy().astype(float)
+        y = sub[y_col].to_numpy().astype(float)
+        ax.scatter(x, y, alpha=0.75, color=color, edgecolor="white", s=60, label=label)
+        plotted += 1
+        if x.size >= 2:
+            slope, intercept = np.polyfit(x, y, 1)
+            xs = np.linspace(float(np.min(x)), float(np.max(x)), 100)
+            ax.plot(xs, slope * xs + intercept, color=color, lw=2)
+    if plotted == 0:
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         ax.set_axis_off()
         return _save(fig, path)
-    x = df[x_col].to_numpy().astype(float)
-    y = df["mae_primary"].to_numpy().astype(float)
-    ax.scatter(x, y, alpha=0.7, color="#4C78A8", edgecolor="white", s=60)
-    if x.size >= 2:
-        slope, intercept = np.polyfit(x, y, 1)
-        xs = np.linspace(float(np.min(x)), float(np.max(x)), 100)
-        ax.plot(xs, slope * xs + intercept, color="#E45756", lw=2, label="linear fit")
-        log_x = np.log(x + 1.0)
-        log_slope, log_intercept = np.polyfit(log_x, y, 1)
-        ax.plot(
-            xs,
-            log_slope * np.log(xs + 1.0) + log_intercept,
-            color="#F58518",
-            lw=2,
-            ls="--",
-            label="log fit",
-        )
-        ax.legend(fontsize=10)
+    ax.legend(fontsize=10, title="Data source")
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Person MAE (mg/dL)")
     return _save(fig, path)
 
 
-def _plot_duration_bins(participants: pl.DataFrame, path: Path) -> Path:
-    rows: list[dict[str, object]] = []
-    for row in participants.iter_rows(named=True):
-        mae = row.get("mae_primary")
-        if mae is None or not np.isfinite(mae):
-            continue
-        if row.get("diabetic"):
-            label = _duration_bin(row.get("diabetes_duration"), DIABETES_DURATION_BINS)
-            if label:
-                rows.append({"facet": "Diabetes duration", "bin": label, "mae": mae})
-        if row.get("uses_cgm"):
-            label = _duration_bin(row.get("cgm_duration_years"), CGM_DURATION_BINS)
-            if label:
-                rows.append({"facet": "CGM experience", "bin": label, "mae": mae})
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
-    if not rows:
-        for ax in axes:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center")
-            ax.set_axis_off()
+def _plot_people_clusters(participants: pl.DataFrame, path: Path) -> Path:
+    """Each person as a point in own-vs-generic space, coloured by cohort."""
+    df = participants.filter(pl.col("mae_primary").is_not_null())
+    fig, ax = plt.subplots(figsize=(12.5, 9))
+    if df.height == 0:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center")
+        ax.set_axis_off()
         return _save(fig, path)
 
-    for ax, facet in zip(axes, ["Diabetes duration", "CGM experience"], strict=True):
-        sub = [r for r in rows if r["facet"] == facet]
-        if not sub:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center")
-            ax.set_axis_off()
+    for key in _COHORT_ORDER:
+        sub = df.filter(pl.col("cohort_category") == key) if "cohort_category" in df.columns else df.head(0)
+        if sub.height == 0:
             continue
-        order = (
-            [b[0] for b in DIABETES_DURATION_BINS]
-            if facet.startswith("Diabetes")
-            else [b[0] for b in CGM_DURATION_BINS]
+        x = (
+            sub["mae_generic"].fill_null(sub["mae_primary"]).to_numpy().astype(float)
+            if "mae_generic" in sub.columns
+            else sub["mae_primary"].to_numpy().astype(float)
         )
-        sns.boxplot(
-            x=[str(r["bin"]) for r in sub],
-            y=[float(r["mae"]) for r in sub],  # type: ignore[arg-type]
-            order=order,
-            ax=ax,
-            color="#72B7B2",
+        y = (
+            sub["mae_own"].fill_null(sub["mae_primary"]).to_numpy().astype(float)
+            if "mae_own" in sub.columns
+            else sub["mae_primary"].to_numpy().astype(float)
         )
-        ax.set_title(facet)
-        ax.set_xlabel("")
-        ax.set_ylabel("Person MAE (mg/dL)")
-        ax.tick_params(axis="x", rotation=25)
-    fig.suptitle("Exploratory duration bins (study design §7.4)", y=1.02)
+        challenge = (
+            sub["played_challenge_unknown"].to_list()
+            if "played_challenge_unknown" in sub.columns
+            else [False] * sub.height
+        )
+        face = [_COHORT_COLORS[key]] * sub.height
+        edge = ["#111827" if flag else "white" for flag in challenge]
+        ax.scatter(
+            x,
+            y,
+            s=70,
+            alpha=0.8,
+            c=face,
+            edgecolors=edge,
+            linewidths=1.2,
+            label=COHORT_LABELS.get(key, key),
+        )
+    ax.set_xlabel("Generic MAE (mg/dL)")
+    ax.set_ylabel("Own MAE (mg/dL) — falls back to person MAE if missing")
+    ax.set_title("People as points (colour = cohort, dark ring = Challenge the unknown)")
+    ax.legend(fontsize=8, loc="best")
+    return _save(fig, path)
+
+
+def _plot_opposite_trait(participants: pl.DataFrame, path: Path) -> Path:
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    same_col = "mae_same_trait"
+    opp_col = "mae_opposite_trait"
+    labels: list[str] = []
+    values: list[float] = []
+    if same_col in participants.columns and opp_col in participants.columns:
+        for row in participants.iter_rows(named=True):
+            if row.get(same_col) is not None and np.isfinite(row[same_col]):
+                labels.append("Same trait")
+                values.append(float(row[same_col]))
+            if row.get(opp_col) is not None and np.isfinite(row[opp_col]):
+                labels.append("Opposite trait")
+                values.append(float(row[opp_col]))
+    if values:
+        sns.violinplot(x=labels, y=values, ax=axes[0], inner=None, cut=0, color="#72B7B2")
+        sns.swarmplot(x=labels, y=values, ax=axes[0], color="#1e293b", size=4, alpha=0.8)
+        axes[0].set_ylabel("Person MAE (mg/dL)")
+        axes[0].set_title("Same-trait vs opposite-trait traces")
+    else:
+        axes[0].text(0.5, 0.5, "No opposite-trait scores yet", ha="center", va="center")
+        axes[0].set_axis_off()
+
+    paired = participants
+    if same_col in participants.columns and opp_col in participants.columns:
+        paired = participants.filter(
+            pl.col(same_col).is_not_null() & pl.col(opp_col).is_not_null()
+        )
+    else:
+        paired = participants.head(0)
+    if paired.height:
+        x = paired[same_col].to_numpy().astype(float)
+        y = paired[opp_col].to_numpy().astype(float)
+        axes[1].scatter(x, y, alpha=0.8, color="#E45756", edgecolor="white", s=70)
+        lim_max = float(max(np.max(x), np.max(y)) * 1.08)
+        lim_min = float(min(np.min(x), np.min(y)) * 0.92)
+        axes[1].plot([lim_min, lim_max], [lim_min, lim_max], color="#666666", ls="--")
+        axes[1].set_xlim(lim_min, lim_max)
+        axes[1].set_ylim(lim_min, lim_max)
+        axes[1].set_aspect("equal")
+        axes[1].set_xlabel("Same-trait MAE")
+        axes[1].set_ylabel("Opposite-trait MAE")
+        axes[1].set_title("Below diagonal = better on the opposite trait")
+    else:
+        axes[1].text(0.5, 0.5, "No one has both sides", ha="center", va="center")
+        axes[1].set_axis_off()
+    fig.suptitle("Challenge the unknown / opposite-trait play", y=1.02)
     return _save(fig, path)
 
 
@@ -231,7 +337,7 @@ def _plot_own_vs_generic(participants: pl.DataFrame, path: Path) -> Path:
     df = participants.filter(
         pl.col("mae_generic").is_not_null() & pl.col("mae_own").is_not_null()
     )
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(10, 10))
     if df.height == 0:
         ax.text(0.5, 0.5, "No paired own/generic data", ha="center", va="center")
         ax.set_axis_off()
@@ -262,7 +368,7 @@ def _plot_benchmark_bands(
         .to_numpy()
         .astype(float)
     )
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(13, 7.5))
     if values.size == 0:
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         ax.set_axis_off()
@@ -282,15 +388,25 @@ def _plot_benchmark_bands(
 
 def _plot_mae_distribution(participants: pl.DataFrame, path: Path) -> Path:
     df = participants.filter(pl.col("mae_primary").is_not_null())
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(12, 7.5))
     if df.height == 0:
         ax.text(0.5, 0.5, "No data", ha="center", va="center")
         ax.set_axis_off()
         return _save(fig, path)
-    sns.histplot(df["mae_primary"].to_numpy(), bins=20, ax=ax, color="#9D755D", edgecolor="white")
+    values = df["mae_primary"].to_numpy().astype(float)
+    sns.kdeplot(values, ax=ax, fill=True, color="#9D755D", alpha=0.35)
+    sns.rugplot(values, ax=ax, color="#1e293b", height=0.06)
+    ax.scatter(
+        values,
+        np.full_like(values, 0.02 * max(ax.get_ylim()[1], 1e-6)),
+        alpha=0.45,
+        s=18,
+        color="#1e293b",
+        zorder=3,
+    )
     ax.set_xlabel("Person MAE (mg/dL)")
-    ax.set_ylabel("Count")
-    ax.set_title("Distribution of per-person MAE")
+    ax.set_ylabel("Density")
+    ax.set_title("Per-person MAE as a point cloud (each tick is one person)")
     return _save(fig, path)
 
 
@@ -317,19 +433,19 @@ def _plot_cohort_pie(participants: pl.DataFrame, path: Path) -> Path:
             if key in counts:
                 counts[key] += 1
 
-    fig, ax = plt.subplots(figsize=(8.5, 6))
+    fig, ax = plt.subplots(figsize=(8, 8))
     values = [counts[k] for k in _COHORT_ORDER]
     if sum(values) == 0:
         ax.text(0.5, 0.5, "No cohort labels", ha="center", va="center")
         ax.set_axis_off()
         return _save(fig, path)
 
-    labels = [f"{COHORT_LABELS[k]}\n({counts[k]})" for k in _COHORT_ORDER if counts[k] > 0]
+    labels = [f"{COHORT_LABELS[k]} ({counts[k]})" for k in _COHORT_ORDER if counts[k] > 0]
     sizes = [counts[k] for k in _COHORT_ORDER if counts[k] > 0]
     colors = [_COHORT_COLORS[k] for k in _COHORT_ORDER if counts[k] > 0]
-    _wedges, _texts, autotexts = ax.pie(
+    wedges, _texts, autotexts = ax.pie(
         sizes,
-        labels=labels,
+        labels=None,
         colors=colors,
         autopct=lambda pct: f"{pct:.0f}%" if pct >= 4 else "",
         startangle=90,
@@ -339,6 +455,15 @@ def _plot_cohort_pie(participants: pl.DataFrame, path: Path) -> Path:
     for text in autotexts:
         text.set_color("white")
         text.set_fontweight("bold")
+    ax.legend(
+        wedges,
+        labels,
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        frameon=False,
+        fontsize=10,
+    )
+    ax.set_aspect("equal")
     ax.set_title("Players by diabetes × CGM category")
     return _save(fig, path)
 
@@ -357,7 +482,7 @@ def _plot_mae_by_format(participants: pl.DataFrame, path: Path) -> Path:
                 labels.append(f"Format {fmt}")
                 values.append(number)
 
-    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    fig, ax = plt.subplots(figsize=(12, 8))
     if not values:
         ax.text(0.5, 0.5, "No per-format MAE", ha="center", va="center")
         ax.set_axis_off()
@@ -365,9 +490,11 @@ def _plot_mae_by_format(participants: pl.DataFrame, path: Path) -> Path:
 
     order = ["Format A", "Format B", "Format C"]
     palette = {"Format A": _FORMAT_COLORS["A"], "Format B": _FORMAT_COLORS["B"], "Format C": _FORMAT_COLORS["C"]}
-    sns.boxplot(x=labels, y=values, order=order, hue=labels, palette=palette, legend=False, ax=ax)
-    sns.stripplot(x=labels, y=values, order=order, ax=ax, color="#333333", alpha=0.45, size=4)
-    ax.set_title("How people performed on each task")
+    sns.violinplot(
+        x=labels, y=values, order=order, hue=labels, palette=palette, legend=False, ax=ax, inner=None, cut=0
+    )
+    sns.swarmplot(x=labels, y=values, order=order, ax=ax, color="#1e293b", size=4, alpha=0.75)
+    ax.set_title("How people performed on each task (one point per person)")
     ax.set_xlabel("Task (A = generic, B = own data, C = mixed)")
     ax.set_ylabel("Person MAE on that format (mg/dL)")
     return _save(fig, path)
@@ -383,16 +510,7 @@ def _plot_players_vs_repeats(participants: pl.DataFrame, path: Path) -> Path:
     n_single = n_people - n_repeat
     n_runs = int(participants["n_runs"].sum()) if "n_runs" in participants.columns else n_people
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].bar(
-        ["Unique players", "Single-run", "Repeat players", "Saved runs"],
-        [n_people, n_single, n_repeat, n_runs],
-        color=["#4C78A8", "#72B7B2", "#F58518", "#9D755D"],
-    )
-    axes[0].set_title("Individuals vs repeats")
-    axes[0].set_ylabel("Count")
-    axes[0].tick_params(axis="x", rotation=15)
-
+    fig, ax = plt.subplots(figsize=(12, 8))
     labels: list[str] = []
     values: list[float] = []
     if "is_repeat_player" in participants.columns:
@@ -403,34 +521,38 @@ def _plot_players_vs_repeats(participants: pl.DataFrame, path: Path) -> Path:
             labels.append("Repeat players" if row.get("is_repeat_player") else "Single-run")
             values.append(float(mae))
     if values:
-        sns.boxplot(
+        sns.violinplot(
             x=labels,
             y=values,
             order=["Single-run", "Repeat players"],
-            ax=axes[1],
+            ax=ax,
             color="#4C78A8",
+            inner=None,
+            cut=0,
         )
-        sns.stripplot(
+        sns.swarmplot(
             x=labels,
             y=values,
             order=["Single-run", "Repeat players"],
-            ax=axes[1],
-            color="#333333",
-            alpha=0.5,
-            size=4,
+            ax=ax,
+            color="#1e293b",
+            alpha=0.8,
+            size=5,
         )
-        axes[1].set_ylabel("Person MAE (mg/dL)")
-        axes[1].set_title("Accuracy: first-timers vs people who came back")
+        ax.set_ylabel("Person MAE (mg/dL)")
+        ax.set_title(
+            f"First-timers vs people who came back "
+            f"(n={n_people} people, {n_single} single / {n_repeat} repeat, {n_runs} saved runs)"
+        )
     else:
-        axes[1].text(0.5, 0.5, "No MAE", ha="center", va="center")
-        axes[1].set_axis_off()
-    fig.suptitle("Who played once, and who played again", y=1.02)
+        ax.text(0.5, 0.5, "No MAE", ha="center", va="center")
+        ax.set_axis_off()
     return _save(fig, path)
 
 
 def _plot_all_formats_own_vs_generic(participants: pl.DataFrame, path: Path) -> Path:
     if "played_all_formats" not in participants.columns:
-        fig, ax = plt.subplots(figsize=(7, 6))
+        fig, ax = plt.subplots(figsize=(11, 9))
         ax.text(0.5, 0.5, "No all-format flag", ha="center", va="center")
         ax.set_axis_off()
         return _save(fig, path)
@@ -438,7 +560,7 @@ def _plot_all_formats_own_vs_generic(participants: pl.DataFrame, path: Path) -> 
     df = participants.filter(pl.col("played_all_formats")).filter(
         pl.col("mae_generic").is_not_null() & pl.col("mae_own").is_not_null()
     )
-    fig, ax = plt.subplots(figsize=(7.2, 6.4))
+    fig, ax = plt.subplots(figsize=(11, 10))
     if df.height == 0:
         ax.text(0.5, 0.5, "No one played A, B and C with both scores", ha="center", va="center")
         ax.set_axis_off()
