@@ -120,10 +120,11 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
         "groups_or_predictors": "Human MAE vs model MAE (same segments)",
         "outcome": "Person- or segment-level MAE in mg/dL",
         "method": (
-            "Deferred in the human edition. Sequences are exported for post-factum "
-            "scoring; the AI edition ingests model CSVs and compares them here."
+            "Rebuild the same 3-hour window, convert to the glucose-forecasting "
+            "layout, score persistence / linear / SugarOne (when present), then "
+            "paired person-level MAE (human vs each model). α = 0.05."
         ),
-        "section": "§7.4 / AI edition",
+        "section": "§7.4 / merged report",
     },
 }
 

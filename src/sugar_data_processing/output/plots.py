@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,69 +41,78 @@ def generate_all_figures(
     suite: HypothesisSuite,
     benchmarks: BenchmarkContext,
     figures_dir: Path,
+    *,
+    name_prefix: str = "",
+    title_prefix: str = "",
 ) -> dict[str, Path]:
-    """Create the standard figure set and return relative name → path."""
+    """Create the standard figure set and return relative name → path.
+
+    ``name_prefix`` / ``title_prefix`` stay available if a caller wants a
+    second copy of the human figure set. The AI tab no longer uses that path.
+    """
     with start_action(action_type="output.generate_all_figures") as action:
         figures_dir.mkdir(parents=True, exist_ok=True)
+        pre = name_prefix
+        label = title_prefix
         paths: dict[str, Path] = {}
         paths["mae_by_diabetes"] = _plot_group_mae(
             participants,
             "diabetic",
-            "Diabetes status vs MAE, each group split into generic vs own",
-            figures_dir / "h1_mae_by_diabetes.png",
+            f"{label}Diabetes status vs MAE, each group split into generic vs own",
+            figures_dir / f"{pre}h1_mae_by_diabetes.png",
             yes_label="PwD",
             no_label="non-PwD",
         )
         paths["mae_by_cgm"] = _plot_group_mae(
             participants,
             "uses_cgm",
-            "CGM use vs MAE, each group split into generic vs own",
-            figures_dir / "h2_mae_by_cgm.png",
+            f"{label}CGM use vs MAE, each group split into generic vs own",
+            figures_dir / f"{pre}h2_mae_by_cgm.png",
             yes_label="CGM user",
             no_label="no CGM",
         )
         paths["diabetes_duration_scatter"] = _plot_duration_scatter(
             participants,
             x_col="diabetes_duration_months",
-            title="Diabetes duration vs MAE on generic and own data (PwD only)",
+            title=f"{label}Diabetes duration vs MAE on generic and own data (PwD only)",
             xlabel="Diabetes duration (months)",
-            path=figures_dir / "h3_diabetes_duration_scatter.png",
+            path=figures_dir / f"{pre}h3_diabetes_duration_scatter.png",
             diabetic_only=True,
         )
         paths["cgm_duration_scatter"] = _plot_duration_scatter(
             participants,
             x_col="cgm_duration_months",
-            title="CGM experience vs MAE on generic and own data (CGM users only)",
+            title=f"{label}CGM experience vs MAE on generic and own data (CGM users only)",
             xlabel="CGM experience (months)",
-            path=figures_dir / "h4_cgm_duration_scatter.png",
+            path=figures_dir / f"{pre}h4_cgm_duration_scatter.png",
             cgm_only=True,
         )
         paths["people_clusters"] = _plot_people_clusters(
-            participants, figures_dir / "people_clusters.png"
+            participants, figures_dir / f"{pre}people_clusters.png"
         )
         paths["opposite_trait"] = _plot_opposite_trait(
-            participants, figures_dir / "opposite_trait.png"
+            participants, figures_dir / f"{pre}opposite_trait.png"
         )
         paths["own_vs_generic"] = _plot_own_vs_generic(
-            participants, figures_dir / "h5_own_vs_generic.png"
+            participants, figures_dir / f"{pre}h5_own_vs_generic.png"
         )
         paths["benchmark_bands"] = _plot_benchmark_bands(
-            participants, benchmarks, figures_dir / "benchmark_human_vs_literature.png"
+            participants, benchmarks, figures_dir / f"{pre}benchmark_human_vs_literature.png"
         )
         paths["mae_distribution"] = _plot_mae_distribution(
-            participants, figures_dir / "mae_distribution.png"
+            participants, figures_dir / f"{pre}mae_distribution.png"
         )
         paths["cohort_pie"] = _plot_cohort_pie(
-            participants, figures_dir / "cohort_categories_pie.png"
+            participants, figures_dir / f"{pre}cohort_categories_pie.png"
         )
         paths["mae_by_format"] = _plot_mae_by_format(
-            participants, figures_dir / "mae_by_format.png"
+            participants, figures_dir / f"{pre}mae_by_format.png"
         )
         paths["players_vs_repeats"] = _plot_players_vs_repeats(
-            participants, figures_dir / "players_vs_repeats.png"
+            participants, figures_dir / f"{pre}players_vs_repeats.png"
         )
         paths["all_formats_own_vs_generic"] = _plot_all_formats_own_vs_generic(
-            participants, figures_dir / "all_formats_own_vs_generic.png"
+            participants, figures_dir / f"{pre}all_formats_own_vs_generic.png"
         )
         action.log(message_type="info", n_figures=len(paths), suite_h1=suite.h1 is not None)
         return paths
@@ -583,6 +593,237 @@ def _plot_all_formats_own_vs_generic(participants: pl.DataFrame, path: Path) -> 
     ax.set_title(
         f"Players who tried every variant (n={df.height})\n"
         f"Better on own: {better_own}  |  Better on generic: {better_generic}  |  Tied: {tied}"
+    )
+    ax.legend(fontsize=10)
+    return _save(fig, path)
+
+
+_TASK_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("mae_format_a", "Generic (A)", "#4C78A8"),
+    ("mae_format_b", "Own (B)", "#54A24B"),
+    ("mae_format_c", "Mixed (C)", "#F58518"),
+)
+
+
+def generate_ai_comparison_figures(
+    human: pl.DataFrame,
+    ai: pl.DataFrame,
+    figures_dir: Path,
+) -> dict[str, Path]:
+    """Human vs primary-model MAE by task. No H1–H4 — person traits do not move the model."""
+    with start_action(action_type="output.generate_ai_comparison_figures") as action:
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        joined = _join_human_ai_tasks(human, ai)
+        paths = {
+            "task_mae": _plot_task_human_vs_ai(
+                joined, figures_dir / "ai_task_mae.png"
+            ),
+            "same_user_cluster": _plot_same_user_cluster(
+                joined, figures_dir / "ai_same_user_cluster.png"
+            ),
+        }
+        action.log(message_type="info", n_joined=joined.height, n_figures=len(paths))
+        return paths
+
+
+def task_comparison_summary(human: pl.DataFrame, ai: pl.DataFrame) -> dict[str, Any]:
+    """Counts and means for same-person human vs AI scores. Missing sides are dropped."""
+    joined = _join_human_ai_tasks(human, ai)
+    tasks: dict[str, dict[str, Any]] = {}
+    for col, label, _color in _TASK_SPECS:
+        human_col = f"human_{col}"
+        ai_col = f"ai_{col}"
+        human_vals: list[float] = []
+        ai_vals: list[float] = []
+        human_better = 0
+        ai_better = 0
+        if human_col in joined.columns and ai_col in joined.columns:
+            for row in joined.iter_rows(named=True):
+                human_v = _finite(row.get(human_col))
+                ai_v = _finite(row.get(ai_col))
+                if human_v is None or ai_v is None:
+                    continue
+                human_vals.append(human_v)
+                ai_vals.append(ai_v)
+                if human_v < ai_v:
+                    human_better += 1
+                elif ai_v < human_v:
+                    ai_better += 1
+        n = len(human_vals)
+        tasks[label] = {
+            "n": n,
+            "human_mean": (sum(human_vals) / n) if n else None,
+            "ai_mean": (sum(ai_vals) / n) if n else None,
+            "human_better": human_better,
+            "ai_better": ai_better,
+        }
+
+    cluster_human_spread: list[float] = []
+    cluster_ai_spread: list[float] = []
+    human_better_own = 0
+    human_better_generic = 0
+    ai_better_own = 0
+    ai_better_generic = 0
+    for row in joined.iter_rows(named=True):
+        hg = _finite(row.get("human_mae_format_a"))
+        ho = _finite(row.get("human_mae_format_b"))
+        ag = _finite(row.get("ai_mae_format_a"))
+        ao = _finite(row.get("ai_mae_format_b"))
+        if hg is None or ho is None or ag is None or ao is None:
+            continue
+        cluster_human_spread.append(abs(hg - ho))
+        cluster_ai_spread.append(abs(ag - ao))
+        if ho < hg:
+            human_better_own += 1
+        elif hg < ho:
+            human_better_generic += 1
+        if ao < ag:
+            ai_better_own += 1
+        elif ag < ao:
+            ai_better_generic += 1
+    n_cluster = len(cluster_human_spread)
+    return {
+        "n_joined": joined.height,
+        "tasks": tasks,
+        "cluster": {
+            "n": n_cluster,
+            "human_better_own": human_better_own,
+            "human_better_generic": human_better_generic,
+            "ai_better_own": ai_better_own,
+            "ai_better_generic": ai_better_generic,
+            "human_mean_abs_gap": (
+                sum(cluster_human_spread) / n_cluster if n_cluster else None
+            ),
+            "ai_mean_abs_gap": (
+                sum(cluster_ai_spread) / n_cluster if n_cluster else None
+            ),
+        },
+    }
+
+
+def _join_human_ai_tasks(human: pl.DataFrame, ai: pl.DataFrame) -> pl.DataFrame:
+    cols = ["study_id", "mae_format_a", "mae_format_b", "mae_format_c"]
+    keep_h = [c for c in cols if c in human.columns]
+    keep_a = [c for c in cols if c in ai.columns]
+    if "study_id" not in keep_h or "study_id" not in keep_a:
+        return pl.DataFrame(schema={"study_id": pl.Utf8})
+    left = human.select(keep_h).rename(
+        {c: f"human_{c}" for c in keep_h if c != "study_id"}
+    )
+    right = ai.select(keep_a).rename(
+        {c: f"ai_{c}" for c in keep_a if c != "study_id"}
+    )
+    return left.join(right, on="study_id", how="inner")
+
+
+def _finite(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
+
+def _plot_task_human_vs_ai(joined: pl.DataFrame, path: Path) -> Path:
+    """One point per user per task, only when that user has both human and AI scores."""
+    labels: list[str] = []
+    values: list[float] = []
+    who: list[str] = []
+    for col, label, _color in _TASK_SPECS:
+        human_col = f"human_{col}"
+        ai_col = f"ai_{col}"
+        if human_col not in joined.columns or ai_col not in joined.columns:
+            continue
+        for row in joined.iter_rows(named=True):
+            human_v = _finite(row.get(human_col))
+            ai_v = _finite(row.get(ai_col))
+            if human_v is None or ai_v is None:
+                continue
+            labels.extend([label, label])
+            values.extend([human_v, ai_v])
+            who.extend(["Human", "AI"])
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    order = [label for _col, label, _color in _TASK_SPECS]
+    if not values:
+        ax.text(0.5, 0.5, "No paired human + AI task scores", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    sns.swarmplot(
+        x=labels,
+        y=values,
+        hue=who,
+        order=order,
+        hue_order=["Human", "AI"],
+        palette={"Human": "#2563eb", "AI": "#9333ea"},
+        ax=ax,
+        size=6,
+        dodge=True,
+    )
+    ax.set_title(
+        "Same person, same task: human vs AI MAE\n"
+        "Generic / Own / Mixed are formats A, B, C — mixed is format C, not a blend"
+    )
+    ax.set_xlabel("Task")
+    ax.set_ylabel("Person MAE on that task (mg/dL)")
+    ax.legend(title="")
+    return _save(fig, path)
+
+
+def _plot_same_user_cluster(joined: pl.DataFrame, path: Path) -> Path:
+    """Generic (A) vs own (B) for users who have both, human and AI overlaid."""
+    fig, ax = plt.subplots(figsize=(11, 10))
+    if "human_mae_format_a" not in joined.columns:
+        ax.text(0.5, 0.5, "No format MAE columns", ha="center", va="center")
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    xs_h: list[float] = []
+    ys_h: list[float] = []
+    xs_a: list[float] = []
+    ys_a: list[float] = []
+    for row in joined.iter_rows(named=True):
+        hg = _finite(row.get("human_mae_format_a"))
+        ho = _finite(row.get("human_mae_format_b"))
+        ag = _finite(row.get("ai_mae_format_a"))
+        ao = _finite(row.get("ai_mae_format_b"))
+        if hg is None or ho is None or ag is None or ao is None:
+            continue
+        xs_h.append(hg)
+        ys_h.append(ho)
+        xs_a.append(ag)
+        ys_a.append(ao)
+        ax.plot([hg, ag], [ho, ao], color="#cbd5e1", lw=0.9, zorder=1)
+
+    if not xs_h:
+        ax.text(
+            0.5,
+            0.5,
+            "No user has both Generic (A) and Own (B) on human and AI",
+            ha="center",
+            va="center",
+        )
+        ax.set_axis_off()
+        return _save(fig, path)
+
+    ax.scatter(xs_h, ys_h, s=70, color="#2563eb", edgecolor="white", zorder=3, label="Human")
+    ax.scatter(xs_a, ys_a, s=70, color="#9333ea", edgecolor="white", zorder=3, label="AI")
+    all_v = xs_h + ys_h + xs_a + ys_a
+    lim_max = float(max(all_v) * 1.08)
+    lim_min = float(min(all_v) * 0.92)
+    ax.plot([lim_min, lim_max], [lim_min, lim_max], color="#666666", ls="--", label="equal MAE")
+    ax.set_xlim(lim_min, lim_max)
+    ax.set_ylim(lim_min, lim_max)
+    ax.set_aspect("equal")
+    ax.set_xlabel("Generic (A) MAE (mg/dL)")
+    ax.set_ylabel("Own (B) MAE (mg/dL)")
+    ax.set_title(
+        f"Same user on generic vs own (n={len(xs_h)})\n"
+        "Grey line joins that person's human point to their AI point. "
+        "Below the diagonal = better on own data."
     )
     ax.legend(fontsize=10)
     return _save(fig, path)

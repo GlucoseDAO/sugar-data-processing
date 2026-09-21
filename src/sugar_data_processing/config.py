@@ -58,13 +58,31 @@ EVALUATION_MODE_LABELS: dict[str, str] = {
     EVALUATION_MODE_IN_PLACE: "In place (scored during the game)",
 }
 
-# Report edition filenames (human is the current deliverable; AI is the follow-on)
-HUMAN_REPORT_MD: str = "human_analysis_report.md"
-HUMAN_REPORT_JSON: str = "human_analysis_report.json"
-HUMAN_EXPLORER_HTML: str = "human_explorer.html"
-AI_REPORT_MD: str = "ai_analysis_report.md"
-AI_REPORT_JSON: str = "ai_analysis_report.json"
-AI_EXPLORER_HTML: str = "ai_explorer.html"
+# One merged deliverable (human + AI). Old split filenames are deleted on write.
+REPORT_MD: str = "analysis_report.md"
+REPORT_JSON: str = "analysis_report.json"
+EXPLORER_HTML: str = "explorer.html"
+MILESTONE_HTML: str = "milestone.html"
+STALE_REPORT_FILES: tuple[str, ...] = (
+    "human_analysis_report.md",
+    "human_analysis_report.json",
+    "human_explorer.html",
+    "ai_analysis_report.md",
+    "ai_analysis_report.json",
+    "ai_explorer.html",
+    "study_analysis_report.md",
+    "study_analysis_report.json",
+    "study_explorer.html",
+)
+
+# Game window the human saw: 36 points = 3 hours at 5-minute sampling
+# (24 visible context + 12 hidden forecast points).
+GAME_WINDOW_POINTS: int = 36
+VISIBLE_CONTEXT_POINTS: int = 24
+FORECAST_HORIZON_POINTS: int = 12
+SAMPLE_MINUTES: int = 5
+MODEL_INPUT_SIZE: int = 128
+PRIMARY_MODEL_NAME: str = "persistence"
 
 # GlucoBench / literature MAE bands for 60-minute horizon (mg/dL)
 SIMPLE_BASELINE_MAE_RANGE: tuple[float, float] = (12.0, 20.0)
@@ -95,6 +113,34 @@ MAX_PLAUSIBLE_AGE: float = 120.0
 MAE_IQR_OUTLIER_K: float = 1.5
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[2]
+DEFAULT_SUGAR_SUGAR_ROOT: Path = REPO_ROOT.parent / "sugar-sugar"
+DEFAULT_FORECASTING_ROOT: Path = (
+    REPO_ROOT.parent.parent / "glucose-forecasting" / "glucose-forecasting"
+)
+FORECASTING_ROOT_CANDIDATES: tuple[Path, ...] = (
+    DEFAULT_FORECASTING_ROOT,
+    REPO_ROOT.parent.parent / "g-forecasting2" / "glucose-forecasting",
+    REPO_ROOT.parent.parent / "glucose-forecasting",
+)
+
+
+def find_forecasting_root(explicit: Path | None = None) -> Path | None:
+    """First sibling checkout that contains the GluMind sources."""
+    ordered: list[Path] = []
+    if explicit is not None:
+        ordered.append(Path(explicit))
+    ordered.extend(FORECASTING_ROOT_CANDIDATES)
+    seen: set[Path] = set()
+    for path in ordered:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if (resolved / "scripts" / "glumind" / "glumind_model.py").exists():
+            return resolved
+    return None
+
+
 DEFAULT_RAW_CSV: Path = REPO_ROOT / "data" / "raw" / "prediction_statistics.csv"
 DEFAULT_FIXTURE_CSV: Path = REPO_ROOT / "data" / "fixtures" / "synthetic_prediction_statistics.csv"
 DEFAULT_SIBLING_STATS: Path = (

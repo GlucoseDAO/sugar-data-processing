@@ -21,7 +21,11 @@ from sugar_data_processing.output.narration import (
     explain_verification,
     how_to_read_report,
 )
-from sugar_data_processing.output.plots import generate_all_figures
+from sugar_data_processing.output.plots import (
+    generate_ai_comparison_figures,
+    generate_all_figures,
+    task_comparison_summary,
+)
 from sugar_data_processing.output.report import write_report
 
 __all__ = [
@@ -35,7 +39,9 @@ __all__ = [
     "explain_report_written",
     "explain_study_goal",
     "explain_verification",
+    "generate_ai_comparison_figures",
     "generate_all_figures",
+    "task_comparison_summary",
     "how_to_read_report",
     "report_figures_dir",
     "show_report_figures",

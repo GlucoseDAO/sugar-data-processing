@@ -87,7 +87,7 @@ def analyze(
         help="Use bundled synthetic fixture instead of --csv / data/raw",
     ),
 ) -> None:
-    """Gather → verify → test H1–H5 → compare → write human report, HTML, and AI sequence export."""
+    """Gather → verify → test H1–H5 → score models on the same windows → write the merged report."""
     _configure_logging()
     if use_fixture:
         csv_path = DEFAULT_FIXTURE_CSV
@@ -302,7 +302,7 @@ def ingest_ai(
     output: Path = typer.Option(DEFAULT_OUTPUT_DIR, "--output", "-o"),
     use_fixture: bool = typer.Option(False, "--fixture"),
 ) -> None:
-    """Join already-scored model predictions and write the AI edition of the report."""
+    """Join already-scored model predictions, then rewrite the merged report."""
     _configure_logging()
     csv_path = _resolve_csv(csv, use_fixture)
     if not csv_path.exists():

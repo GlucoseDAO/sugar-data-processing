@@ -82,6 +82,16 @@ REPORT_FIGURES: tuple[ReportFigure, ...] = (
         "People who played every variant: own vs generic",
         "Below the diagonal: better on their own data than on generic traces.",
     ),
+    ReportFigure(
+        "ai_task_mae.png",
+        "Same person, same task: human vs AI MAE",
+        "Generic (A), Own (B), Mixed (C). A person only appears if they have both scores on that task. Mixed is format C.",
+    ),
+    ReportFigure(
+        "ai_same_user_cluster.png",
+        "Same user on generic vs own: human and AI",
+        "Only people with Generic (A) and Own (B) on both sides. Grey line joins that person's human point to their AI point.",
+    ),
 )
 
 

@@ -14,8 +14,8 @@ library module, exercised in a Jupyter notebook, or run end-to-end via the CLI.
 | **2. Data verification** | `sugar_data_processing.verification` | Schema / structural checks + demographic & metric quality flags |
 | **3. Statistical tests** | `sugar_data_processing.statistics` | H1–H5 (§7.3–7.4) on person-level MAE |
 | **4. Data comparison** | `sugar_data_processing.comparison` | Human MAE vs GlucoBench / literature bands (§7.5) |
-| **5. Output** | `sugar_data_processing.output` | PNG figures + **human** markdown / JSON / HTML explorer |
-| **6. AI export / ingest** | `sugar_data_processing.ai` | Sequence CSVs for models; AI edition after ingest |
+| **5. Output** | `sugar_data_processing.output` | PNG figures + one merged markdown / JSON / `explorer.html` |
+| **6. AI scoring** | `sugar_data_processing.ai` | Rebuild the 3-hour game window, score models, fold into the same report |
 
 Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 
@@ -28,7 +28,7 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 | **H3** | Diabetes duration (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H4** | CGM experience (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
-| **H6** | Human vs baseline models | Deferred in the human edition; AI edition after `sdp ingest-ai` |
+| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / GluMind (`torch` + sibling `test_model`) |
 
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.
@@ -86,7 +86,7 @@ data/
   processed/       # parquet/csv intermediates (written by output stage)
 output/
   figures/         # PNGs
-  reports/         # human_analysis_report.md + human_explorer.html + AI stubs
+  reports/         # analysis_report.md + explorer.html + milestone.html
 tests/             # pytest (real synthetic data, no mocks)
 docs/
   analysis-plan.md # study design §7 → module map
@@ -177,10 +177,10 @@ Resolution order for `analyze` without `--csv` / `--fixture`:
 
 | File | What it is |
 | --- | --- |
-| `output/reports/human_analysis_report.md` | **Human** edition: cohort, H1–H5, opposite trait, verification |
-| `output/reports/human_explorer.html` | Same results, interactive (point clouds, not bins) |
-| `output/reports/ai_analysis_report.md` | **AI** edition (scaffold until `sdp ingest-ai`) |
-| `output/reports/human_analysis_report.json` | Machine-readable human payload |
+| `output/reports/analysis_report.md` | Merged report: human H1–H5, then same-person human vs AI by task |
+| `output/reports/explorer.html` | Tabs: Overview, Human, AI, People (actual / human / AI lines) |
+| `output/reports/milestone.html` | Milestone page: human participants only (Overview + Human) |
+| `output/reports/analysis_report.json` | Machine-readable human + AI payload |
 | `data/processed/ai/prediction_points.csv` | Per-point sequences for post-factum model scoring |
 | `output/figures/*.png` | Plots (also copied under `output/reports/figures/`) |
 | `data/processed/participants.csv` | Person-level analysis table |
@@ -264,7 +264,7 @@ write_report(
 | Verification | `VerificationReport` (schema + quality) | Embedded in report JSON / markdown §6 |
 | Statistics | `HypothesisSuite` (H1–H5) | Report §3–4 + JSON `hypotheses` |
 | Comparison | `BenchmarkContext` | Report §5 + JSON `benchmarks` |
-| Output | report path | `output/reports/human_*`, AI stub, `output/figures/*`, `data/processed/*` + `data/processed/ai/` |
+| Output | report path | `output/reports/analysis_report.*`, `explorer.html`, `output/figures/*`, `data/processed/*` + `data/processed/ai/` |
 
 ### Verification details
 
@@ -284,6 +284,7 @@ uv run pytest
 
 ## Notes
 
-- H6 is deferred in the **human** edition. Sequences are exported so models can
-  be scored post factum; `sdp ingest-ai` fills the **AI** edition.
+- Models only see the 3-hour game window (24 visible points, left-padded to
+  128). `explorer.html` People tab overlays actual CGM, the human line, and
+  each AI forecast.
 - See `docs/analysis-plan.md` for the §7 → module mapping and format conventions.

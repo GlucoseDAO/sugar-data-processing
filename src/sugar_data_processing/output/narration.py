@@ -159,11 +159,34 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
         f"**Test plan:** {info['method']}\n\n"
     )
     if key == "h6":
+        if result and result.get("status") == "scored":
+            rows = []
+            for item in result.get("comparisons") or []:
+                human = item.get("human_mean_mae")
+                model = item.get("model_mean_mae")
+                name = item.get("model_name")
+                rows.append(
+                    f"| `{name}` | "
+                    f"{human:.2f} | {model:.2f} | "
+                    f"{item.get('test_used', '—')} | "
+                    f"{_fmt_p(item.get('p_value'))} |"
+                )
+            table = "\n".join(rows) or "| — | — | — | — | — |"
+            lookback = result.get("lookback") or ""
+            return (
+                header
+                + f"**Status:** scored on the same 3-hour windows the humans played.\n\n"
+                + f"{lookback}\n\n"
+                + "| Model | Human MAE | Model MAE | Test | p |\n"
+                + "| --- | ---: | ---: | --- | --- |\n"
+                + table
+                + "\n"
+            )
         return header + (
-            "**Status:** deferred in the **human** edition. Saved game sequences "
-            "are exported so models can be scored **post factum**. The **AI** "
-            "edition will show the comparison once `sdp ingest-ai` has model "
-            "output. In-place scoring (during the live game) is not collected yet.\n"
+            "**Status:** no model scores on reconstructed windows yet. "
+            "The pipeline rebuilds the 3-hour game slice, converts it to the "
+            "glucose-forecasting CSV layout, and scores persistence / linear "
+            "(plus SugarOne when that sibling checkout is present).\n"
         )
     if result is None:
         return header + (
@@ -263,20 +286,41 @@ def explain_report_written(report_path: Path) -> str:
     )
 
 
+def explain_milestone_page() -> str:
+    return (
+        "This file is the **milestone** explorer: human participants only. "
+        "There is no AI comparison and no per-person replay. "
+        "Overview is how to read the study; Human has the cohort, H1–H5, "
+        "opposite-trait, and the participant table."
+    )
+
+
+def explain_milestone_reading() -> str:
+    return (
+        "## How to read this page\n\n"
+        "1. **Overview** — how the numbers work, literature context, verification.\n"
+        "2. **Human** — who played, primary and secondary hypotheses, opposite-trait, "
+        "and every participant in the current filter.\n\n"
+        f"{STATS_GLOSSARY}\n"
+    )
+
+
 def explain_edition_and_ai_path() -> str:
     return (
-        "This file is the **human** edition of the study analysis. The same "
-        "numbers are also rendered in `human_explorer.html`. A companion **AI** "
-        "edition (`ai_analysis_report.md` / `ai_explorer.html`) will carry every "
-        "trait of this report and add human-vs-model comparison once scored "
-        "predictions are ingested.\n\n"
-        "AI processing is split on purpose:\n"
-        "1. **Export** (done with this pipeline) — write one row per glucose "
-        "point (`timestamp`, `real_mgdl`, `human_predicted_mgdl`, window "
-        "location) so models can replay saved games **post factum**.\n"
-        "2. **Ingest** — take already-scored model CSVs and display them. "
-        "Two evaluation categories exist: `post_factum` (what we have now) and "
-        "`in_place` (scored during the live game; not collected yet)."
+        "This is the **merged** study report: human H1–H5 first, then a "
+        "same-person comparison of human vs AI MAE on Generic (A), Own (B), "
+        "and Mixed (C). Person traits do not move the model, so the AI half "
+        "does not repeat H1–H4. The explorer (`explorer.html`) has four tabs "
+        "— Overview, Human, AI, and People (all rounds for one person, "
+        "Next / Previous to walk the cohort).\n\n"
+        "Models only see the **3-hour game window** the human saw (24 visible "
+        "points, left-padded to the 128-step model lookback). Own-data rounds "
+        "use the upload saved under sugar-sugar `data/input/users`.\n\n"
+        "1. **Export** — one row per forecast point.\n"
+        "2. **Convert / score** — rebuild the 36-point window, write "
+        "`ml_ready.csv`, run persistence, linear, and SugarOne when available.\n"
+        "3. **Compare** — H6 is the paired human-vs-model test on those windows "
+        "(evaluation mode: **post factum**; in-place live-game scores are not collected yet)."
     )
 
 
@@ -318,8 +362,7 @@ def how_to_read_report() -> str:
         "5. **Literature context** — human MAE vs published model bands.\n"
         "6. **Verification** — data-quality checks you should not skip.\n\n"
         "Each figure sits next to the paragraph it belongs to, not in a gallery "
-        "at the end. There is also an interactive `human_explorer.html` next to "
-        "this file (this markdown is the **human** edition; an **AI** edition "
-        "will be written after models are ingested).\n\n"
+        "at the end. Open `explorer.html` for four tabs: Overview, Human, AI, "
+        "and People (actual CGM vs human vs each AI line).\n\n"
         f"{STATS_GLOSSARY}\n"
     )
