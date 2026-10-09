@@ -55,6 +55,8 @@ LINE_STYLES: dict[str, dict[str, str]] = {
     "linear": {"color": "#16a34a", "dash": "dashdot", "label": "AI linear"},
     "glumind": {"color": "#9333ea", "dash": "longdash", "label": "AI GluMind"},
     "sugar_one": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne / GluMind"},
+    "citras": {"color": "#be123c", "dash": "dashdot", "label": "AI CITRAS-FM (W38.7)"},
+    "citras_w38_2": {"color": "#4338ca", "dash": "solid", "label": "AI CITRAS-FM (W38.2)"},
 }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 # Primary analysis population (study design §7.2)
@@ -123,6 +124,39 @@ FORECASTING_ROOT_CANDIDATES: tuple[Path, ...] = (
     REPO_ROOT.parent.parent / "glucose-forecasting",
 )
 
+# Dual-mode CITRAS-FM inpainters. Weights stay in gitignored data/raw/.
+CITRAS_HF_REPO: str = (
+    "GlucoseDao/DUAL_MODE-CITRAS-FM-W38.7-120h_past-116h_post-threemodes-hybridrefiner-ilet10-s43"
+)
+CITRAS_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "citras_w38_7"
+CITRAS_W38_2_HF_REPO: str = (
+    "GlucoseDao/DUAL_MODE-CITRAS-FM-W38.2-120h_past-116h_post-threemodes-threesource-ilet3-s42"
+)
+CITRAS_W38_2_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "citras_w38_2"
+CITRAS_PAST_STEPS: int = 1440
+CITRAS_GAP_STEPS: int = 48
+CITRAS_POST_STEPS: int = 1392
+CITRAS_SEQ_LEN: int = CITRAS_PAST_STEPS + CITRAS_GAP_STEPS + CITRAS_POST_STEPS
+
+
+@dataclass(frozen=True)
+class CitrasModelSpec:
+    """One Hub ONNX bundle and the model_name it writes into scored tables."""
+
+    name: str
+    repo_id: str
+    cache_dir: Path
+
+
+CITRAS_MODELS: tuple[CitrasModelSpec, ...] = (
+    CitrasModelSpec(name="citras", repo_id=CITRAS_HF_REPO, cache_dir=CITRAS_CACHE_DIR),
+    CitrasModelSpec(
+        name="citras_w38_2",
+        repo_id=CITRAS_W38_2_HF_REPO,
+        cache_dir=CITRAS_W38_2_CACHE_DIR,
+    ),
+)
+
 
 def find_forecasting_root(explicit: Path | None = None) -> Path | None:
     """First sibling checkout that contains the GluMind sources."""
@@ -137,6 +171,28 @@ def find_forecasting_root(explicit: Path | None = None) -> Path | None:
             continue
         seen.add(resolved)
         if (resolved / "scripts" / "glumind" / "glumind_model.py").exists():
+            return resolved
+    return None
+
+
+def find_citras_bundle(
+    explicit: Path | None = None,
+    *,
+    spec: CitrasModelSpec | None = None,
+) -> Path | None:
+    """Directory with ``model.onnx`` for a dual-mode CITRAS-FM bundle."""
+    chosen = spec if spec is not None else CITRAS_MODELS[0]
+    ordered: list[Path] = []
+    if explicit is not None:
+        ordered.append(Path(explicit))
+    ordered.append(chosen.cache_dir)
+    seen: set[Path] = set()
+    for path in ordered:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if (resolved / "model.onnx").exists() and (resolved / "onnx_meta.json").exists():
             return resolved
     return None
 

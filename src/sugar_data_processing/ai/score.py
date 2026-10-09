@@ -8,6 +8,7 @@ import numpy as np
 import polars as pl
 from eliot import start_action
 
+from sugar_data_processing.ai.citras import score_all_citras_windows
 from sugar_data_processing.ai.convert import pad_context, write_ml_ready_csv
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
@@ -21,6 +22,8 @@ MODEL_PERSISTENCE: str = "persistence"
 MODEL_LINEAR: str = "linear"
 MODEL_GLUMIND: str = "glumind"
 MODEL_SUGAR_ONE: str = "sugar_one"
+MODEL_CITRAS: str = "citras"
+MODEL_CITRAS_W38_2: str = "citras_w38_2"
 
 
 def score_windows(
@@ -34,12 +37,15 @@ def score_windows(
     Always scores ``persistence`` (last visible value) and ``linear``
     (slope of the last six visible points). ``glumind`` is added when a
     sibling glucose-forecasting checkout can load ``test_model`` and torch.
+    ``citras`` / ``citras_w38_2`` are added when the matching dual-mode ONNX
+    bundle is on disk or downloadable with ``HF_TOKEN``.
     """
     with start_action(action_type="ai.score_windows", n_windows=len(windows)) as action:
         if ml_ready_path is not None:
             write_ml_ready_csv(windows, ml_ready_path)
         rows: list[dict[str, object]] = []
         deep = _score_glumind_batch(windows, forecasting_root)
+        citras_by_model = score_all_citras_windows(windows)
         for window in windows:
             preds = {
                 MODEL_PERSISTENCE: _persistence(window.context_mgdl),
@@ -48,6 +54,9 @@ def score_windows(
             key = (window.study_id, window.run_id, window.round_number)
             if key in deep:
                 preds[MODEL_GLUMIND] = deep[key]
+            for model_name, by_key in citras_by_model.items():
+                if key in by_key:
+                    preds[model_name] = by_key[key]
             for model_name, values in preds.items():
                 for index, value in enumerate(values):
                     rows.append(

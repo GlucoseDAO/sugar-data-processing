@@ -879,8 +879,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       linear: "rectRot",
       glumind: "star",
       sugar_one: "star",
+      citras: "crossRot",
+      citras_w38_2: "cross",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "sugar_one"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "sugar_one", "citras", "citras_w38_2"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
@@ -1080,7 +1082,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function showMissingModel(ids) {
       const note = document.getElementById("missingModel");
-      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.sugar_one));
+      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.sugar_one || t.models.citras || t.models.citras_w38_2));
       if (haveDeep || !ids.length) {
         note.hidden = true;
         note.textContent = "";

@@ -8,7 +8,8 @@ import polars as pl
 import pytest
 
 from sugar_data_processing.ai.export import export_prediction_sequences
-from sugar_data_processing.ai.score import MODEL_GLUMIND, score_windows
+from sugar_data_processing.ai.citras import CITRAS_CHANNELS, featurize_forward_window
+from sugar_data_processing.ai.score import MODEL_CITRAS, MODEL_CITRAS_W38_2, MODEL_GLUMIND, score_windows
 from sugar_data_processing.ai.sequences import known_data_rounds
 from sugar_data_processing.ai.ingest import ingest_model_predictions
 from sugar_data_processing.ai.report import write_ai_report
@@ -19,7 +20,13 @@ from sugar_data_processing.ai.traces import (
     percent_error_series,
 )
 from sugar_data_processing.ai.windows import PlayedWindow
-from sugar_data_processing.config import find_forecasting_root
+from sugar_data_processing.config import (
+    CITRAS_MODELS,
+    CITRAS_PAST_STEPS,
+    CITRAS_SEQ_LEN,
+    find_citras_bundle,
+    find_forecasting_root,
+)
 from sugar_data_processing.comparison.benchmarks import benchmark_context
 from sugar_data_processing.fixtures.synthetic import write_synthetic_csv
 from sugar_data_processing.gathering import build_participant_table, load_prediction_statistics
@@ -116,6 +123,8 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     html = (tmp_path / "out" / "reports" / "explorer.html").read_text(encoding="utf-8")
     assert 'data-tab="people"' in html
     assert "Actual CGM" in html
+    assert "#be123c" in html
+    assert "#4338ca" in html
     assert "nextPerson" in html
     assert "line_styles" in html
     assert "aiTaskMae" in html
@@ -210,6 +219,43 @@ def _sample_window() -> PlayedWindow:
         human_predicted_mgdl=[128.0 + i for i in range(12)],
         resolved_path="example.csv",
     )
+
+
+def test_citras_forward_features_hide_everything_after_origin() -> None:
+    context = [100.0 + i for i in range(24)]
+    features = featurize_forward_window(context)
+    assert features.shape == (CITRAS_SEQ_LEN, len(CITRAS_CHANNELS))
+    past = CITRAS_PAST_STEPS
+    observed = features[:past, 1]
+    assert int(observed.sum()) == 24
+    assert observed[-24:].tolist() == [1.0] * 24
+    assert features[past:, 1].tolist() == [0.0] * (CITRAS_SEQ_LEN - past)
+    assert features[past:, 6].tolist() == [1.0] * (CITRAS_SEQ_LEN - past)
+    assert features[past - 1, 0] == pytest.approx(1.23)
+    assert float(features[:, 3].sum()) == 0.0
+    assert float(features[:, 5].sum()) == 0.0
+    assert float(features[:, 9].sum()) == 0.0
+
+
+def test_citras_scores_one_real_window() -> None:
+    bundle = find_citras_bundle()
+    if bundle is None:
+        pytest.skip("CITRAS ONNX bundle is not on disk")
+    scored = score_windows([_sample_window()])
+    names = set(scored["model_name"].to_list())
+    assert MODEL_CITRAS in names
+    citras = scored.filter(pl.col("model_name") == MODEL_CITRAS)
+    assert citras.height == 12
+    assert citras["model_predicted_mgdl"].null_count() == 0
+    values = [float(v) for v in citras["model_predicted_mgdl"].to_list()]
+    assert all(40.0 <= v <= 400.0 for v in values)
+    if find_citras_bundle(spec=CITRAS_MODELS[1]) is not None:
+        assert MODEL_CITRAS_W38_2 in names
+        w38_2 = scored.filter(pl.col("model_name") == MODEL_CITRAS_W38_2)
+        assert w38_2.height == 12
+        later = [float(v) for v in w38_2["model_predicted_mgdl"].to_list()]
+        assert all(40.0 <= v <= 400.0 for v in later)
+        assert later != values
 
 
 def test_glumind_scores_one_real_window() -> None:
