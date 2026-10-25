@@ -198,6 +198,9 @@ def find_citras_bundle(
 
 
 DEFAULT_RAW_CSV: Path = REPO_ROOT / "data" / "raw" / "prediction_statistics.csv"
+# Verifier copy of the statistics export. Still health data; gitignored like data/raw.
+DEFAULT_ANONYMIZED_DIR: Path = REPO_ROOT / "data" / "anonymized_raw"
+DEFAULT_ANONYMIZED_CSV: Path = DEFAULT_ANONYMIZED_DIR / "prediction_statistics.csv"
 DEFAULT_FIXTURE_CSV: Path = REPO_ROOT / "data" / "fixtures" / "synthetic_prediction_statistics.csv"
 DEFAULT_SIBLING_STATS: Path = (
     REPO_ROOT.parent / "sugar-sugar" / "data" / "input" / "prediction_statistics.csv"

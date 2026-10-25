@@ -15,8 +15,10 @@ from sugar_data_processing.ai.export import export_prediction_sequences
 from sugar_data_processing.ai.ingest import ingest_model_predictions
 from sugar_data_processing.ai.report import write_ai_report
 from sugar_data_processing.ai.sequences import build_point_table
+from sugar_data_processing.anonymize import anonymize_statistics_csv
 from sugar_data_processing.config import (
     DEFAULT_AI_DIR,
+    DEFAULT_ANONYMIZED_CSV,
     DEFAULT_FIXTURE_CSV,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_RAW_CSV,
@@ -220,6 +222,52 @@ def fetch(
         console.print(f"Current-app columns present: {', '.join(extra)}")
     if then_analyze:
         _run_analyze(pulled.dest, output)
+
+
+@app.command("anonymize")
+def anonymize(
+    csv: Path = typer.Option(
+        DEFAULT_RAW_CSV,
+        "--csv",
+        help="prediction_statistics.csv verifiers would rebuild the HTML from",
+        exists=False,
+        dir_okay=False,
+    ),
+    dest: Path = typer.Option(
+        DEFAULT_ANONYMIZED_CSV,
+        "--dest",
+        help="Verifier copy (emails and names replaced; study_id and metrics kept)",
+        dir_okay=False,
+    ),
+) -> None:
+    """Write a contact-free copy of the statistics CSV for outside verifiers.
+
+    The analysis is unchanged: same ``study_id``, same rounds, same corpus
+    filenames. Emails become ``email1@gmail.com``, ``email2@gmail.com``, …
+    (one alias per person, stable when the address or ``study_id`` repeats).
+    Names become initials, with a number when those initials collide.
+    Personal upload filenames use that same label. Location is cleared.
+
+    Verifiers rebuild the page themselves::
+
+        uv run sdp analyze --csv data/anonymized_raw/prediction_statistics.csv
+    """
+    _configure_logging()
+    if not csv.exists():
+        console.print(f"[red]CSV not found:[/red] {csv}")
+        raise typer.Exit(code=1)
+    written = anonymize_statistics_csv(csv, dest)
+    console.print(f"[green]Wrote[/green] {written.dest}")
+    console.print(
+        f"Rows: {written.n_rows} | People: {written.n_people} | "
+        f"Email aliases: {written.n_email_aliases} | "
+        f"Name cells: {written.n_name_cells} | "
+        f"Personal filenames: {written.n_personal_filenames}"
+    )
+    console.print(
+        "Verifiers rebuild the HTML with "
+        f"[bold]uv run sdp analyze --csv {written.dest}[/bold]"
+    )
 
 
 @app.command("make-fixture")

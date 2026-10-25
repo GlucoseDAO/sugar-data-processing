@@ -13,6 +13,11 @@ build/
 data/raw/*
 !data/raw/.gitkeep
 
+# Anonymized statistics export for verifiers (glucose values stay local)
+data/anonymized_raw/*
+!data/anonymized_raw/.gitkeep
+!data/anonymized_raw/README.md
+
 # Generated artefacts
 output/reports/*
 !output/reports/.gitkeep

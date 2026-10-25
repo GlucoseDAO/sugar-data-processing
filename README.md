@@ -82,6 +82,7 @@ notebooks/
   study_analysis.ipynb   # thin walkthrough over the library (same paths as CLI)
 data/
   raw/             # drop real prediction_statistics.csv here (gitignored)
+  anonymized_raw/  # verifier copy of that CSV (gitignored; see below)
   fixtures/        # committed synthetic demo data
   processed/       # parquet/csv intermediates (written by output stage)
 output/
@@ -134,6 +135,7 @@ uv run sdp fetch --analyze
 
 That is the whole online path: `scp` → blank `email` / `location` /
 `paper_full_name` → write `data/raw/prediction_statistics.csv` → reports.
+What that file contains is [below](#what-is-extracted-from-the-server).
 
 Pull only (no tests):
 
@@ -147,7 +149,52 @@ Re-run H1–H5 on the last pulled CSV (no SSH):
 uv run sdp analyze
 ```
 
-Then open the files in [Where the numbers are](#where-the-numbers-are).
+### What is extracted from the server
+
+`uv run sdp fetch` copies one file, `prediction_statistics.csv`, and writes it to `data/raw/prediction_statistics.csv`. Consent records, the email-to-study-id map, and the CGM files participants uploaded stay on the server.
+
+On the way in, three columns are blanked:
+
+| Column | After fetch |
+| --- | --- |
+| `email` | empty |
+| `location` | empty |
+| `paper_full_name` | empty |
+
+Everything else in that export is kept, because the tests read it:
+
+| Kept | What it is |
+| --- | --- |
+| `study_id`, `run_id`, `timestamp`, `format`, `rounds_played` | which session |
+| `age`, `gender`, `diabetic`, `diabetic_type`, `diabetes_duration`, `uses_cgm`, `cgm_duration_years` | inputs to H1–H4 |
+| `predicted_values`, `real_values`, `prediction_times`, `per_round_metrics`, `round_context`, the overall MAE / RMSE / MAPE columns | the game window and the errors |
+| `data_source_name` | a public corpus name (`D1NAMO-…`, `BIGIDEAS-…`) or the participant's own upload filename |
+| `challenge_unknown`, `generic_intervention`, `paper_mention` | study flags. The paper's name is the blanked column above |
+
+The upload filename is the piece that can still identify someone: it can be a person's name or a Nightscout host, and it is repeated inside `per_round_metrics` and `round_context`. It remains in `data/raw/`. Loading the CSV for a report replaces those filenames with `own_upload`, so the HTML does not show them. Glucose values and the demographic columns are the health data the statistics are computed from.
+
+`uv run sdp anonymize` writes a second copy for evaluators. Same rows and the same `study_id` and metrics. Corpus filenames stay. Each person gets one stand-in address (`email1@gmail.com`, `email2@gmail.com`, …). Upload filenames become initials (`AL.csv`, and `AL2.csv` when those initials are already used).
+
+### How to run with an anonymized file
+
+Give evaluators `data/anonymized_raw/prediction_statistics.csv`, together with this repo. That CSV is the input the HTML is rebuilt from.
+
+They store it at:
+
+`data/anonymized_raw/prediction_statistics.csv`
+
+```bash
+uv sync
+uv run sdp analyze --csv data/anonymized_raw/prediction_statistics.csv
+```
+
+Pass `--csv`. A plain `uv run sdp analyze` reads `data/raw/prediction_statistics.csv` when that file exists. Reports land in `output/reports/`; `milestone.html` is the human page. See [Where the numbers are](#where-the-numbers-are).
+
+Build the file you send (from the last fetch):
+
+```bash
+uv run sdp anonymize
+```
 
 ### Synthetic fixture (no credentials)
 
