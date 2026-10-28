@@ -42,16 +42,22 @@ def overlay_model_mae(
     participants: pl.DataFrame,
     scored: pl.DataFrame,
     model_name: str,
+    *,
+    error_column: str = "model_abs_error",
 ) -> pl.DataFrame:
-    """Copy the human person table, replacing MAE columns with one model's scores."""
-    with start_action(action_type="ai.overlay_model_mae", model=model_name) as action:
+    """Copy the human person table, replacing MAE columns with one model's scores.
+
+    With ``error_column="human_abs_error"`` the scores are the people's own, but
+    only on the rounds this model scored, so H6 can pair like with like.
+    """
+    with start_action(action_type="ai.overlay_model_mae", model=model_name, error_column=error_column) as action:
         model_rows = scored.filter(pl.col("model_name") == model_name)
         if model_rows.height == 0:
             action.log(message_type="warning", reason="no_scores")
             return participants
         rounds = (
             model_rows.group_by(["study_id", "run_id", "round_number", "source", "format"])
-            .agg(pl.col("model_abs_error").mean().alias("mae"))
+            .agg(pl.col(error_column).mean().alias("mae"))
         )
         if "is_opposite_trait" in model_rows.columns:
             trait = (
@@ -122,13 +128,18 @@ def h6_human_vs_models(
     human: pl.DataFrame,
     scored: pl.DataFrame,
 ) -> dict[str, object]:
-    """Paired person-level MAE: human vs each ingested model on the same people."""
+    """Paired person-level MAE: human vs each ingested model on the same people and rounds.
+
+    A person's human MAE here comes from the same scored rounds as the model's,
+    not from every round they played, so neither side gets easier traces.
+    """
     models = sorted(str(m) for m in scored["model_name"].unique().to_list()) if scored.height else []
     comparisons: list[dict[str, object]] = []
     notes: list[str] = []
     for name in models:
         ai = overlay_model_mae(human, scored, name)
-        paired = human.join(
+        same_rounds = overlay_model_mae(human, scored, name, error_column="human_abs_error")
+        paired = same_rounds.select(["study_id", "mae_primary"]).join(
             ai.select(["study_id", "mae_primary"]).rename({"mae_primary": "mae_model"}),
             on="study_id",
             how="inner",
@@ -153,9 +164,13 @@ def h6_human_vs_models(
         "n_models": len(comparisons),
         "comparisons": comparisons,
         "notes": notes,
+        "pairing": (
+            "Each person's human MAE is recomputed from only the rounds the model "
+            "scored, so people and models are compared on identical windows."
+        ),
         "lookback": (
-            "Models were fed only the 3-hour game window (24 visible CGM points, "
-            "left-padded to 128). They did not see extra pre-game history."
+            "Models were fed only the 24 visible CGM points of the game window; "
+            "anything before them is marked missing. They did not see extra pre-game history."
         ),
     }
 

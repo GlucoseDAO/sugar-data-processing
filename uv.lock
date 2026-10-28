@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -266,6 +266,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/68/5a/e536c528bc8057496c360c0978559a2dc45653f89dd6151078aa7d8fca1a/cffi-2.1.0-cp315-cp315t-win32.whl", hash = "sha256:cb96698e3c7413d906ce83f8ffd245ec1bd94707541f299d0ce4d6b0193e982b", size = 182760, upload-time = "2026-07-06T21:34:22.059Z" },
     { url = "https://files.pythonhosted.org/packages/d3/0b/0ffe8b82d3875bced5fa1e7986a7a46b748262a40ab7f60b475eb9fb1bb3/cffi-2.1.0-cp315-cp315t-win_amd64.whl", hash = "sha256:f146d154428a2523f9cc7936c02353c2459b8f6cf07d3cd1ee1c0a611109c5d5", size = 193769, upload-time = "2026-07-06T21:34:23.589Z" },
     { url = "https://files.pythonhosted.org/packages/a0/17/1073b53b68c9b5ca6914adf5f8bf55aacc2d3be102418c90700160ea8605/cffi-2.1.0-cp315-cp315t-win_arm64.whl", hash = "sha256:cbb7640ce37159548d2147b5b8c241f962143d4c71231431820783f4dc78f210", size = 186405, upload-time = "2026-07-06T21:34:24.857Z" },
+]
+
+[[package]]
+name = "cgm-format"
+version = "0.13.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "polars" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/6d/fc270cf3e1424e5d716bdc1164bcecf7f93db8d77485ece092da28b6be10/cgm_format-0.13.0.tar.gz", hash = "sha256:d49e81a9b2155a8d1bd02bb9b684813a67e110bc1ba3d7c1d34c7d799f3d19c7", size = 641444, upload-time = "2026-10-21T18:13:25.896Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/aa/e6871f01b27dec35470662ed78882ea765ee72b8d7c608771d340690390d/cgm_format-0.13.0-py3-none-any.whl", hash = "sha256:fde405be9377c111d6c92ef00308bd32ca763487e82bad2af64032cb081b8c37", size = 185839, upload-time = "2026-10-21T18:13:24.127Z" },
 ]
 
 [[package]]
@@ -2550,6 +2562,7 @@ name = "sugar-data-processing"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cgm-format" },
     { name = "eliot" },
     { name = "huggingface-hub" },
     { name = "matplotlib" },
@@ -2577,6 +2590,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cgm-format", specifier = ">=0.12.2" },
     { name = "eliot", specifier = ">=1.18.0" },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
     { name = "matplotlib", specifier = ">=3.11.1" },

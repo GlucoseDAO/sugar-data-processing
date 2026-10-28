@@ -1,4 +1,10 @@
-"""Read a CGM export into a tidy (timestamp, mg/dL) series."""
+"""Read a CGM export into a tidy (timestamp, mg/dL) series, as the game loaded it.
+
+Sugar Sugar loads every source through ``cgm-format`` (``sugar_sugar.data.load_glucose_data``),
+so the rows it showed a player are that library's glucose rows, sorted by time. Reading the files
+any other way shifts row positions and units: D1NAMO keeps mmol/L in separate date and time
+columns, and LOOP exports mix EGV, interpolated and calibration rows.
+"""
 
 from __future__ import annotations
 
@@ -71,79 +77,128 @@ def _parse_timestamps(series: pl.Series) -> pl.Series:
 
 
 def read_glucose_series(path: Path | str) -> pl.DataFrame:
-    """Load one CGM file as ``timestamp`` + ``glucose_mgdl``, EGV rows only.
+    """Load one CGM file as ``timestamp`` + ``glucose_mgdl``: the rows the game showed.
 
-    mmol/L files (D1NAMO, some Libre exports) are converted to mg/dL.
+    Routed like ``sugar_sugar.data.load_glucose_data``: LOOP chronological exports keep
+    their EGV and interpolated rows; D1NAMO and BIG IDEAs subject folders are parsed as
+    a bundle; everything else goes through ``FormatParser.parse_file``. A file
+    cgm-format cannot read falls back to the column-alias reader.
     """
     csv_path = Path(path)
-    empty = pl.DataFrame(schema={"timestamp": pl.Datetime, "glucose_mgdl": pl.Float64})
     with start_action(action_type="ai.read_glucose_series", path=str(csv_path)) as action:
         try:
-            raw = pl.read_csv(csv_path, infer_schema_length=20_000, ignore_errors=True)
-        except Exception as exc:  # noqa: BLE001 — skip unreadable corpus files
-            action.log(message_type="warning", reason=str(exc))
-            return empty
-        if raw.height == 0:
-            return empty
-
-        ts_col = _pick(raw.columns, _TS_ALIASES)
-        glucose_col = _pick(raw.columns, _GLUCOSE_ALIASES)
-        if ts_col is None and "date" in {c.lower() for c in raw.columns} and "time" in {
-            c.lower() for c in raw.columns
-        }:
-            date_col = _pick(raw.columns, ("date",))
-            time_col = _pick(raw.columns, ("time",))
-            raw = raw.with_columns(
-                (pl.col(date_col).cast(pl.Utf8) + " " + pl.col(time_col).cast(pl.Utf8)).alias(
-                    "_joined_ts"
-                )
-            )
-            ts_col = "_joined_ts"
-        if ts_col is None or glucose_col is None:
-            action.log(message_type="warning", reason="missing_columns", columns=raw.columns)
-            return empty
-
-        event_col = _pick(raw.columns, _EVENT_ALIASES)
-        frame = raw.select(
-            [pl.col(ts_col).alias("timestamp_raw"), pl.col(glucose_col).alias("glucose_raw")]
-            + ([pl.col(event_col).alias("event_type")] if event_col else [])
-        )
-        if "event_type" in frame.columns:
-            events = frame["event_type"].cast(pl.Utf8).str.to_uppercase()
-            keep = events.is_in(["EGV", "CGM", "GLUCOSE", ""]) | events.is_null()
-            frame = frame.filter(keep)
-
-        timestamps = _parse_timestamps(frame["timestamp_raw"])
-        glucose = frame["glucose_raw"].cast(pl.Float64, strict=False)
-        out = pl.DataFrame({"timestamp": timestamps, "glucose_mgdl": glucose}).drop_nulls()
-        if out.height == 0:
+            out = _read_like_the_game(csv_path)
+            action.log(message_type="info", reader="cgm-format", n_rows=out.height)
             return out
+        except Exception as exc:  # noqa: BLE001 — fall back for formats the library rejects
+            action.log(message_type="info", reader="aliases", reason=str(exc))
+        return _read_by_aliases(csv_path, action)
 
-        name_says_mmol = any(hint in glucose_col.lower() for hint in _MMOL_HINTS)
-        median = float(out["glucose_mgdl"].median() or 0.0)
-        if name_says_mmol or median < 30.0:
-            out = out.with_columns((pl.col("glucose_mgdl") * 18.0).alias("glucose_mgdl"))
-            action.log(message_type="info", unit="mmol_to_mgdl", median_before=median)
 
-        out = out.sort("timestamp").unique(subset=["timestamp"], keep="last")
-        action.log(message_type="info", n_rows=out.height)
+def _read_like_the_game(path: Path) -> pl.DataFrame:
+    from cgm_format import (
+        CGM_SCHEMA_EXTENDED,
+        ExtendedFormatProcessor,
+        FormatParser,
+        FormatProcessor,
+    )
+
+    if path.name.lower().endswith("_chronological.csv"):
+        return _read_loop_chronological(path)
+    if _is_subject_bundle(path):
+        unified = FormatParser.parse_subject_directory(path.parent)
+    else:
+        unified = FormatParser.parse_file(path)
+    extended = tuple(unified.columns) == tuple(CGM_SCHEMA_EXTENDED.get_column_names(data_only=False))
+    processor = ExtendedFormatProcessor if extended else FormatProcessor
+    glucose, _ = processor.split_glucose_events(unified)
+    return (
+        glucose.filter(pl.col("datetime").is_not_null() & pl.col("glucose").is_not_null())
+        .select(
+            pl.col("datetime").cast(pl.Datetime("us")).alias("timestamp"),
+            pl.col("glucose").cast(pl.Float64).alias("glucose_mgdl"),
+        )
+        .sort("timestamp", maintain_order=True)
+    )
+
+
+def _is_subject_bundle(path: Path) -> bool:
+    """D1NAMO / BIG IDEAs: a folder of files the library parses as one subject."""
+    from cgm_format import FormatParser
+
+    try:
+        return FormatParser.detect_subject_format(path.parent) is not None
+    except Exception:  # noqa: BLE001 — UnknownFormatError, OSError, ValueError
+        return False
+
+
+def _read_loop_chronological(path: Path) -> pl.DataFrame:
+    """``sugar_sugar.data.load_loop_chronological_data``: EGV and interpolated rows."""
+    raw = pl.read_csv(path, infer_schema_length=10_000)
+    glucose_text = pl.col("Glucose (mg/dL)").cast(pl.Utf8, strict=False).str.strip_chars()
+    return (
+        raw.filter(pl.col("Event Type").is_in(["EGV", "Interpolated"]))
+        .filter(pl.col("Glucose (mg/dL)").is_not_null() & (glucose_text != ""))
+        .select(
+            pl.col("Timestamp").str.to_datetime(strict=False).cast(pl.Datetime("us")).alias("timestamp"),
+            glucose_text.cast(pl.Float64, strict=False).alias("glucose_mgdl"),
+        )
+        .filter(pl.col("timestamp").is_not_null() & pl.col("glucose_mgdl").is_not_null())
+        .sort("timestamp", maintain_order=True)
+    )
+
+
+def _read_by_aliases(csv_path: Path, action: Any) -> pl.DataFrame:
+    """Column-alias reader for files cgm-format rejects (EGV rows; mmol/L converted)."""
+    empty = pl.DataFrame(schema={"timestamp": pl.Datetime, "glucose_mgdl": pl.Float64})
+    try:
+        raw = pl.read_csv(csv_path, infer_schema_length=20_000, ignore_errors=True)
+    except Exception as exc:  # noqa: BLE001 — skip unreadable corpus files
+        action.log(message_type="warning", reason=str(exc))
+        return empty
+    if raw.height == 0:
+        return empty
+
+    ts_col = _pick(raw.columns, _TS_ALIASES)
+    glucose_col = _pick(raw.columns, _GLUCOSE_ALIASES)
+    if ts_col is None and "date" in {c.lower() for c in raw.columns} and "time" in {
+        c.lower() for c in raw.columns
+    }:
+        date_col = _pick(raw.columns, ("date",))
+        time_col = _pick(raw.columns, ("time",))
+        raw = raw.with_columns(
+            (pl.col(date_col).cast(pl.Utf8) + " " + pl.col(time_col).cast(pl.Utf8)).alias(
+                "_joined_ts"
+            )
+        )
+        ts_col = "_joined_ts"
+    if ts_col is None or glucose_col is None:
+        action.log(message_type="warning", reason="missing_columns", columns=raw.columns)
+        return empty
+
+    event_col = _pick(raw.columns, _EVENT_ALIASES)
+    frame = raw.select(
+        [pl.col(ts_col).alias("timestamp_raw"), pl.col(glucose_col).alias("glucose_raw")]
+        + ([pl.col(event_col).alias("event_type")] if event_col else [])
+    )
+    if "event_type" in frame.columns:
+        events = frame["event_type"].cast(pl.Utf8).str.to_uppercase()
+        keep = events.is_in(["EGV", "CGM", "GLUCOSE", ""]) | events.is_null()
+        frame = frame.filter(keep)
+
+    timestamps = _parse_timestamps(frame["timestamp_raw"])
+    glucose = frame["glucose_raw"].cast(pl.Float64, strict=False)
+    out = pl.DataFrame({"timestamp": timestamps, "glucose_mgdl": glucose}).drop_nulls()
+    if out.height == 0:
         return out
 
+    name_says_mmol = any(hint in glucose_col.lower() for hint in _MMOL_HINTS)
+    median = float(out["glucose_mgdl"].median() or 0.0)
+    if name_says_mmol or median < 30.0:
+        out = out.with_columns((pl.col("glucose_mgdl") * 18.0).alias("glucose_mgdl"))
+        action.log(message_type="info", unit="mmol_to_mgdl", median_before=median)
 
-def nearest_index(timestamps: list[datetime], target: datetime, *, tol_seconds: int = 180) -> int | None:
-    """Index of the series timestamp closest to ``target``, or None if too far."""
-    if not timestamps:
-        return None
-    best_i = 0
-    best_delta = abs((timestamps[0] - target).total_seconds())
-    for i, stamp in enumerate(timestamps[1:], start=1):
-        delta = abs((stamp - target).total_seconds())
-        if delta < best_delta:
-            best_delta = delta
-            best_i = i
-    if best_delta > tol_seconds:
-        return None
-    return best_i
+    return out.sort("timestamp").unique(subset=["timestamp"], keep="last")
 
 
 def parse_timestamp(raw: Any) -> datetime | None:
