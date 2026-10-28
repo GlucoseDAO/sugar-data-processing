@@ -1128,6 +1128,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <p class="lead" id="aiPrimaryNote"></p>
         <p class="prose">Each algorithm saw exactly the same three hours the player saw and forecast the same hidden hour. Only players with both a human and an AI score on a task appear. Tasks: <b>A</b> public traces, <b>B</b> own data, <b>C</b> mixed.</p>
         <div class="stats" id="aiTaskStats"></div>
+        <p class="note" id="aiTaskNote"></p>
         <div class="chip-row" id="aiCohortChips"></div>
         <div class="mix-wrap">
           <span>People</span>
@@ -2577,19 +2578,34 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       renderPeopleTable(rows);
     }
 
-    function firstNum() {
-      for (let i = 0; i < arguments.length; i++) {
-        const value = num(arguments[i]);
-        if (value !== null) return value;
-      }
-      return null;
+    // A task is the game format the rounds were played in. Format C mixes public and own
+    // traces, so falling back to the public / own averages counted C players under A and B too.
+    function taskMae(person, letter) {
+      return person ? num(person["mae_" + letter]) : null;
     }
 
-    function taskMae(person, letter) {
-      if (!person) return null;
-      if (letter === "a") return firstNum(person.mae_a, person.mae_generic);
-      if (letter === "b") return firstNum(person.mae_b, person.mae_own);
-      return firstNum(person.mae_c);
+    // One group per player by the tasks they have a score on, so the groups add up to the player count.
+    function aiTaskBreakdown(pairs, tasks, played, taskPairs) {
+      const combos = new Map();
+      pairs.forEach((p) => {
+        const key = tasks.filter((task) => taskMae(p.human, task.key) !== null).map((task) => task.key.toUpperCase()).join("");
+        combos.set(key, (combos.get(key) || 0) + 1);
+      });
+      const unscored = combos.get("") || 0;
+      const scored = pairs.length - unscored;
+      const keys = [...combos.keys()].filter(Boolean).sort((a, b) => a.length - b.length || a.localeCompare(b));
+      const label = (key) => key.length === 1 ? `only ${key}`
+        : key.length === tasks.length ? "all three"
+        : `${key.slice(0, -1).split("").join(", ")} and ${key.slice(-1)}`;
+      const parts = [];
+      if (unscored) parts.push(`<b>${unscored}</b> saved a game without a scored round, so they are on no task.`);
+      if (keys.length) parts.push(`The other <b>${scored}</b>: ${keys.map((key) => `<b>${combos.get(key)}</b> ${label(key)}`).join(", ")}.`);
+      const taskSum = played.reduce((sum, rows) => sum + rows.length, 0);
+      if (taskSum > scored) parts.push(`A player counts once on each task they played, so the task tiles add up to ${taskSum}, not ${scored}.`);
+      const gaps = tasks.map((task, idx) => ({ letter: task.key.toUpperCase(), n: played[idx].length - taskPairs[idx].length }))
+        .filter((gap) => gap.n);
+      if (gaps.length) parts.push(`${gaps.map((gap) => `<b>${gap.n}</b> on task ${gap.letter}`).join(" and ")} have no AI score there: the game window of those rounds could not be rebuilt from the original CGM file, so the models never saw them.`);
+      return parts.join(" ");
     }
 
     function clusterPoint(person) {
@@ -2624,6 +2640,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const bothSides = pairs.filter((p) => clusterPoint(p.human) && clusterPoint(p.human).kind === "both");
       const statsEl = document.getElementById("aiTaskStats");
       if (statsEl) {
+        const played = tasks.map((task) => pairs.filter((p) => taskMae(p.human, task.key) !== null));
+        const unscored = pairs.filter((p) => tasks.every((task) => taskMae(p.human, task.key) === null)).length;
         const linked = pairs.filter((p) => {
           const h = clusterPoint(p.human);
           const a = clusterPoint(p.ai);
@@ -2632,13 +2650,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         const humanOwn = linked.filter((p) => clusterPoint(p.human).y < clusterPoint(p.human).x).length;
         statsEl.innerHTML = `
           <div class="stat"><b>${pairs.length}</b><span>players in these groups</span></div>
-          <div class="stat"><b>${taskPairs[0].length}</b><span>compared on task A</span></div>
-          <div class="stat"><b>${taskPairs[1].length}</b><span>compared on task B</span></div>
-          <div class="stat"><b>${taskPairs[2].length}</b><span>compared on task C</span></div>
-          <div class="stat"><b>${bothSides.length}</b><span>played public and own</span></div>
-          <div class="stat"><b>${linked.length}</b><span>people and AI on both</span></div>
+          <div class="stat"><b>${unscored}</b><span>saved no scored round</span></div>
+          ${tasks.map((task, idx) => `<div class="stat"><b>${played[idx].length}</b><span>played task ${task.key.toUpperCase()}, ${taskPairs[idx].length} with an AI score</span></div>`).join("")}
+          <div class="stat"><b>${bothSides.length}</b><span>played A and B</span></div>
+          <div class="stat"><b>${linked.length}</b><span>played A and B, AI on both</span></div>
           <div class="stat"><b>${humanOwn}/${linked.length || 0}</b><span>people better on own data</span></div>
         `;
+        const noteEl = document.getElementById("aiTaskNote");
+        if (noteEl) noteEl.innerHTML = aiTaskBreakdown(pairs, tasks, played, taskPairs);
       }
 
       replaceChart("aiTaskMae", "scatter", {
