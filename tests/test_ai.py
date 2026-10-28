@@ -127,6 +127,7 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert LINE_STYLES["citras"]["color"] in html
     assert LINE_STYLES["citras_w38_2"]["color"] in html
     assert 'data-line="' in html
+    assert 'id="aiGlanceModels"' in html
     assert "sugar_one" not in html
     assert "nextPerson" in html
     assert "line_styles" in html

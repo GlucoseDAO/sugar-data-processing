@@ -990,6 +990,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
               <li><b>CITRAS-FM / KronLSTM / GluMind</b>: GlucoseDAO's trained forecasting models, when scored.</li>
             </ul>
             <p class="note" id="aiGlanceNote"></p>
+            <div class="legend-grid" id="aiGlanceModels"></div>
           </div>
           <div class="chart-box tall"><canvas id="aiGlance" data-title="People vs algorithms by trace type"></canvas></div>
         </div>
@@ -1723,15 +1724,18 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       });
       const [all, diabetic, nondiabetic] = summary;
       const overall = (label) => all.values[label] === null ? Infinity : all.values[label];
-      const ordered = ["People"].concat(models.map(modelLabel).sort((a, b) => overall(a) - overall(b)));
+      // Unticked models lose their bars but still pick the shared rounds, so the other bars keep their values.
+      const shown = models.filter((m) => !lineOff.has(m));
+      const ordered = ["People"].concat(shown.map(modelLabel).sort((a, b) => overall(a) - overall(b)));
       const leftOut = scored.length - primary.length;
       document.getElementById("aiGlanceNote").textContent =
         `${all.players} players, ${all.rounds} rounds that every forecaster scored: ` +
         `${diabetic.players} players (${diabetic.rounds} rounds) on diabetic traces and ` +
         `${nondiabetic.players} (${nondiabetic.rounds} rounds) on non-diabetic traces; a player who saw both kinds counts in both.` +
         (leftOut ? ` As in the H6 test, own-data rounds count only for players with no public-trace rounds, so ${leftOut} own-data rounds are left out.` : "") +
-        (trained ? "" : " Only the simple baselines were scored in this build; the trained models are not included yet.");
-      const values = summary.flatMap((s) => Object.values(s.values)).filter((v) => v !== null);
+        (trained ? "" : " Only the simple baselines were scored in this build; the trained models are not included yet.") +
+        (shown.length < models.length ? " Unticked models still count when picking those rounds, so the bars shown keep their values." : "");
+      const values = summary.flatMap((s) => ordered.map((label) => s.values[label])).filter((v) => v !== null);
       const top = values.length ? Math.max(...values) * 1.2 : 30;
       upsertChart("aiGlance", "bar", {
         labels: ordered,
@@ -1865,9 +1869,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <table><thead><tr><th>Forecaster</th><th>Pooled MAE (mg/dL)</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
-    function legendEntry(key, toggle) {
+    function legendEntry(key, toggle, swatch = true) {
       const style = (DATA.line_styles || {})[key] || { color: "#64748b", label: modelLabel(key) };
-      const body = `<span class="swatch solid" style="border-top-color:${style.color}"></span><span><strong>${esc(style.label || key)}</strong></span>`;
+      const mark = swatch ? `<span class="swatch solid" style="border-top-color:${style.color}"></span>` : "";
+      const body = `${mark}<span><strong>${esc(style.label || key)}</strong></span>`;
       if (!toggle) return `<div class="legend-item">${body}</div>`;
       const on = !lineOff.has(key);
       return `<label class="legend-item${on ? "" : " off"}"><input type="checkbox" data-line="${esc(key)}"${on ? " checked" : ""} />${body}</label>`;
@@ -1879,6 +1884,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       if (box) box.innerHTML = legendEntry("actual", false) + ["human"].concat(models).map((key) => legendEntry(key, true)).join("");
       const aiBox = document.getElementById("aiDevModels");
       if (aiBox) aiBox.innerHTML = '<span class="legend-item"><strong>Models shown:</strong></span>' + models.map((key) => legendEntry(key, true)).join("");
+      // Bar colours there mean the kind of trace, so no line swatches.
+      const glanceBox = document.getElementById("aiGlanceModels");
+      if (glanceBox) glanceBox.innerHTML = '<span class="legend-item"><strong>Models shown:</strong></span>' + models.map((key) => legendEntry(key, true, false)).join("");
     }
 
     function playerMatches(traceId, player) {
@@ -3224,11 +3232,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       else lineOff.add(input.dataset.line);
       renderLegend();
       if (DATA.milestone) return;
+      renderAiGlance();
       const rows = filtered(DATA.players);
       renderAiDeviations(rows);
       renderPersonStrip();
     }
-    ["lineLegend", "aiDevModels"].forEach((id) => {
+    ["lineLegend", "aiDevModels", "aiGlanceModels"].forEach((id) => {
       const host = document.getElementById(id);
       if (host) host.addEventListener("change", toggleLine);
     });
