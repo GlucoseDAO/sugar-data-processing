@@ -8,6 +8,7 @@ Type=oneshot
 User=web
 Group=web
 WorkingDirectory=/home/web/sugar-data-processing
+EnvironmentFile=-/home/web/ops/sugar-data-processing/update.env
 ExecStart=/usr/bin/bash /home/web/ops/sugar-data-processing/update-dashboard.sh
 TimeoutStartSec=30min
 Nice=10

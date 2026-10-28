@@ -17,6 +17,9 @@ repo="${SDP_REPO:-/home/web/sugar-data-processing}"
 deploy_dir="${SDP_DEPLOY_DIR:-/home/web/ops/sugar-data-processing}"
 branch="${SDP_BRANCH:-main}"
 uv="${SDP_UV:-/home/web/.local/bin/uv}"
+input_csv="${SDP_INPUT_CSV:-}"
+required_models="${SDP_REQUIRED_MODELS:-}"
+script_path="$(readlink -f -- "$0")"
 build_dir=""
 next_link=""
 
@@ -62,19 +65,74 @@ deployed=""
 if [[ -f "$deploy_dir/deployed-revision" ]]; then
     deployed="$(cat "$deploy_dir/deployed-revision")"
 fi
-if [[ "$force" == false && "$revision" == "$deployed" && -s "$deploy_dir/current/explorer.html" ]]; then
-    printf 'No GitHub changes; dashboard is already at %s.\n' "${revision:0:12}"
+source_csv="${input_csv:-$repo/../sugar-sugar/data/input/prediction_statistics.csv}"
+input_fingerprint="$(python3 - "$source_csv" "$repo" "$required_models" "$script_path" <<'PY'
+import hashlib
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).resolve(strict=True)
+repo = Path(sys.argv[2])
+paths = [source, *sorted(source.parent.glob('archived_*.csv'))]
+models = repo / 'data/raw/hf_models'
+paths.extend(sorted(models.glob('*/*.onnx')))
+paths.extend(sorted(models.glob('*/*.json')))
+paths.append(Path(sys.argv[4]).resolve(strict=True))
+digest = hashlib.sha256(sys.argv[3].encode())
+for path in paths:
+    digest.update(str(path).encode())
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(block)
+print(digest.hexdigest())
+PY
+)"
+deployed_inputs=""
+if [[ -f "$deploy_dir/deployed-input-fingerprint" ]]; then
+    deployed_inputs="$(cat "$deploy_dir/deployed-input-fingerprint")"
+fi
+if [[ "$force" == false && "$revision" == "$deployed" && "$input_fingerprint" == "$deployed_inputs" && -s "$deploy_dir/current/explorer.html" ]]; then
+    printf 'No GitHub or input changes; dashboard is already at %s.\n' "${revision:0:12}"
     exit 0
 fi
 
 printf 'Building dashboard for %s.\n' "$revision"
 "$uv" sync --locked --no-dev
-"$uv" run --frozen --no-dev sdp fetch --sibling
+if [[ -n "$input_csv" ]]; then
+    printf 'Using prepared analysis input: %s\n' "$input_csv"
+else
+    "$uv" run --frozen --no-dev sdp fetch --sibling
+    input_csv="$repo/data/raw/prediction_statistics.csv"
+fi
 build_dir="$(mktemp -d "$deploy_dir/.build.XXXXXXXX")"
-"$uv" run --frozen --no-dev sdp analyze --output "$build_dir/output"
+"$uv" run --frozen --no-dev sdp analyze --csv "$input_csv" --output "$build_dir/output"
 test -s "$build_dir/output/reports/explorer.html"
 test -s "$build_dir/output/reports/milestone.html"
 test -s "$build_dir/output/reports/analysis_report.json"
+python3 - "$build_dir/output/reports" "$revision" "$input_fingerprint" "$required_models" <<'PY'
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+import sys
+
+reports = Path(sys.argv[1])
+report = json.loads((reports / 'analysis_report.json').read_text())
+models = sorted({item['model_name'] for item in report['ai']['h6']['comparisons']})
+required = {name.strip() for name in sys.argv[4].split(',') if name.strip()}
+missing = required.difference(models)
+if missing:
+    raise SystemExit('Refusing to publish without required model scores: ' + ', '.join(sorted(missing)))
+manifest = {
+    'revision': sys.argv[2],
+    'input_fingerprint': sys.argv[3],
+    'published_at': datetime.now(timezone.utc).isoformat(),
+    'models': models,
+    'n_runs': report['n_runs'],
+    'n_participants': report['n_participants'],
+}
+(reports / 'deployment.json').write_text(json.dumps(manifest, indent=2) + '\n')
+print('Validated model scores:', ', '.join(models))
+PY
 
 release="$deploy_dir/releases/$(date -u +%Y%m%dT%H%M%SZ)-${revision:0:12}"
 mv -- "$build_dir/output/reports" "$release"
@@ -83,6 +141,7 @@ ln -s -- "$release" "$next_link"
 mv -Tf -- "$next_link" "$deploy_dir/current"
 next_link=""
 printf '%s\n' "$revision" > "$deploy_dir/deployed-revision"
+printf '%s\n' "$input_fingerprint" > "$deploy_dir/deployed-input-fingerprint"
 printf 'Published dashboard at revision %s.\n' "${revision:0:12}"
 
 # Keep the current release and two older builds for manual rollback.

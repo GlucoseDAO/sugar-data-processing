@@ -5,8 +5,11 @@ The server checks GitHub `origin/main` every five minutes using the systemd
 timer below. No Codex session or running laptop is needed.
 
 The script runs as `web`, fast-forwards a clean checkout, installs the locked
-production dependencies, and builds from the sibling production study CSV.
-If GitHub has not changed, it exits without rebuilding. Failed builds are
+production dependencies, and builds from the configured study CSV. With no
+configuration it fetches the sibling production export. OVH uses a prepared,
+linked export so refreshing the code cannot replace person-level identities
+with browser IDs. If neither GitHub nor the input/model files have changed,
+it exits without rebuilding. Failed builds are
 retried on the next timer run, even if Git has already advanced. Local Git
 changes or diverged history stop the update without overwriting files.
 
@@ -78,6 +81,28 @@ Disable automatic updates:
 sudo systemctl disable --now sugar-data-processing-update.timer
 ```
 
+## Prepared study data and trained models
+
+OVH reads `/home/web/ops/sugar-data-processing/update.env`:
+
+```dotenv
+SDP_INPUT_CSV=/home/web/ops/sugar-data-processing/inputs/prediction_statistics.csv
+SDP_REQUIRED_MODELS=citras,citras_w38_2,kronlstm
+```
+
+Keep the scrubbed, linked export and its `archived_*.csv` files in the `inputs`
+directory. This is a reviewed data snapshot: refresh it explicitly when a new
+linked study export is ready. The updater does not overwrite it with a fetch
+of the raw browser-ID export. Keep trained ONNX bundles in the repository's
+gitignored `data/raw/hf_models/` directory, as on the local analysis machine.
+No Hugging Face credential is needed when the bundles are already on disk.
+
+The updater fingerprints the CSVs, model bundles, and installed script. Input
+changes trigger a rebuild even at the same Git commit. A build is published
+only if the configured trained models appear in its scores; otherwise the
+existing dashboard stays live. `/deployment.json` records the published Git
+revision, input fingerprint, models, and cohort counts without contact fields.
+
 The defaults can be overridden with `SDP_REPO`, `SDP_DEPLOY_DIR`, `SDP_BRANCH`,
-and `SDP_UV`. A change to the installed script or units must be installed again;
+`SDP_UV`, `SDP_INPUT_CSV`, and `SDP_REQUIRED_MODELS`. A change to the installed script or units must be installed again;
 pulling application commits does not replace the running deployment tooling.

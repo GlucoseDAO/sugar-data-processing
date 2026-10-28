@@ -3,7 +3,7 @@ Description=Check GitHub for Sugar Sugar dashboard updates every five minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitInactiveSec=5min
 AccuracySec=15s
 Unit=sugar-data-processing-update.service
 
