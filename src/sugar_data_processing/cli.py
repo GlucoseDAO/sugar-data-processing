@@ -213,6 +213,8 @@ def fetch(
         f"Rows: {pulled.n_rows} | Participants: {pulled.n_participants} | "
         f"Scrubbed: {', '.join(pulled.scrubbed) or 'none'}"
     )
+    for archive in pulled.archives:
+        console.print(f"[green]Wrote[/green] {archive} (archived games, read with the export)")
     extra = [
         col
         for col in ("round_context", "generic_intervention", "challenge_unknown")

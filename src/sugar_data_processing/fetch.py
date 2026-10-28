@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import posixpath
 import shutil
 import subprocess
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import polars as pl
@@ -16,6 +18,7 @@ from sugar_data_processing.config import (
     DEFAULT_SIBLING_STATS,
     REPO_ROOT,
 )
+from sugar_data_processing.gathering.load import ARCHIVE_GLOB
 
 SCRUB_COLUMNS: tuple[str, ...] = ("email", "location", "paper_full_name")
 
@@ -28,6 +31,7 @@ class FetchResult:
     n_participants: int
     columns: list[str]
     scrubbed: list[str]
+    archives: list[Path] = field(default_factory=list)
 
 
 def load_repo_dotenv(path: Path | None = None) -> Path | None:
@@ -163,6 +167,7 @@ def fetch_statistics(
                     raise FileNotFoundError(f"Local source CSV not found: {src_path}")
                 label = str(src_path)
                 shutil.copy2(src_path, incoming)
+                archive_sources = sorted(src_path.parent.glob(ARCHIVE_GLOB))
             elif sibling:
                 src_path = DEFAULT_SIBLING_STATS
                 if not src_path.is_file():
@@ -172,6 +177,7 @@ def fetch_statistics(
                     )
                 label = str(src_path)
                 shutil.copy2(src_path, incoming)
+                archive_sources = sorted(src_path.parent.glob(ARCHIVE_GLOB))
             else:
                 spec = resolve_remote_spec(remote)
                 if spec is None:
@@ -182,8 +188,17 @@ def fetch_statistics(
                 host, remote_path = split_remote(spec)
                 label = f"{host}:{remote_path}"
                 _scp_file(host, remote_path, incoming, identity=identity, batch=batch)
+                archive_sources = []
 
             blanked = scrub_statistics_csv(incoming, dest, keep_contact=keep_contact)
+            if source is None and not sibling:
+                archives = _fetch_remote_archives(
+                    host, remote_path, dest, identity=identity, batch=batch, keep_contact=keep_contact
+                )
+            else:
+                archives = [
+                    _scrub_archive(path, dest, keep_contact=keep_contact) for path in archive_sources
+                ]
         finally:
             incoming.unlink(missing_ok=True)
 
@@ -198,6 +213,7 @@ def fetch_statistics(
             n_participants=n_participants,
             scrubbed=blanked,
             has_round_context="round_context" in stored.columns,
+            archives=[str(path) for path in archives],
         )
         return FetchResult(
             dest=dest,
@@ -206,4 +222,38 @@ def fetch_statistics(
             n_participants=n_participants,
             columns=list(stored.columns),
             scrubbed=blanked,
+            archives=archives,
         )
+
+
+def _scrub_archive(src: Path, dest: Path, *, keep_contact: bool) -> Path:
+    """Scrub one ``archived_*.csv`` next to the fetched export, keeping its name."""
+    out = dest.with_name(src.name)
+    scrub_statistics_csv(src, out, keep_contact=keep_contact)
+    return out
+
+
+def _fetch_remote_archives(
+    host: str,
+    remote_path: str,
+    dest: Path,
+    *,
+    identity: Path | None,
+    batch: bool,
+    keep_contact: bool,
+) -> list[Path]:
+    """Copy any ``archived_*.csv`` beside the remote export; none is not an error."""
+    pattern = posixpath.join(posixpath.dirname(remote_path), ARCHIVE_GLOB)
+    cmd: list[str] = ["scp"]
+    if batch:
+        cmd.extend(["-o", "BatchMode=yes"])
+    if identity is not None:
+        cmd.extend(["-i", str(identity)])
+    with tempfile.TemporaryDirectory(dir=dest.parent) as staging:
+        completed = subprocess.run([*cmd, f"{host}:{pattern}", staging], check=False, capture_output=True)
+        if completed.returncode != 0:
+            return []
+        return [
+            _scrub_archive(path, dest, keep_contact=keep_contact)
+            for path in sorted(Path(staging).glob(ARCHIVE_GLOB))
+        ]

@@ -11,6 +11,7 @@ from eliot import start_action
 
 from sugar_data_processing.config import DEFAULT_SUGAR_SUGAR_ROOT
 from sugar_data_processing.gathering.encoding import parse_per_round_metrics, parse_round_context
+from sugar_data_processing.gathering.load import read_statistics_csv
 from sugar_data_processing.gathering.sources import is_generic_corpus_name, source_basename
 
 _D1NAMO = re.compile(r"^D1NAMO-(\d{3})\.csv$", re.IGNORECASE)
@@ -41,7 +42,7 @@ def original_sources_by_run(raw_csv: Path | str) -> dict[str, dict[int, str]]:
     path = Path(raw_csv)
     if not path.exists():
         return {}
-    raw = pl.read_csv(path, infer_schema_length=10_000)
+    raw = read_statistics_csv(path, infer_schema_length=10_000)
     out: dict[str, dict[int, str]] = {}
     for record in raw.iter_rows(named=True):
         run_id = str(record.get("run_id") or "")

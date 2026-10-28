@@ -33,6 +33,7 @@ from typing import Any
 import polars as pl
 from eliot import start_action
 
+from sugar_data_processing.gathering.load import statistics_csv_paths
 from sugar_data_processing.gathering.sources import is_generic_corpus_name, source_basename
 
 _NAME_FIELDS: tuple[tuple[str, int], ...] = (
@@ -42,6 +43,8 @@ _NAME_FIELDS: tuple[tuple[str, int], ...] = (
     ("name", 1),
 )
 _LITERAL_FIELDS: tuple[str, ...] = ("per_round_metrics", "round_context")
+#: Which file of the export and its archives a row came from, while they are anonymized together.
+_PART_COLUMN: str = "_anonymize_part"
 _FILENAME_NOISE: frozenset[str] = frozenset(
     {
         "csv",
@@ -138,12 +141,20 @@ def anonymize_statistics_csv(src: Path | str, dest: Path | str) -> AnonymizeResu
     with start_action(action_type="anonymize.statistics_csv", source=str(source)) as action:
         if not source.is_file():
             raise FileNotFoundError(f"Statistics CSV not found: {source}")
-        frame = pl.read_csv(source, infer_schema_length=0)
-        rewritten, counts = anonymize_statistics_frame(frame)
+        # Archived games beside the export are anonymized together with it, so a
+        # person keeps one alias across files, and written back as their own files.
+        parts = [(path, pl.read_csv(path, infer_schema_length=0)) for path in statistics_csv_paths(source)]
+        combined = pl.concat(
+            [frame.with_columns(pl.lit(str(i)).alias(_PART_COLUMN)) for i, (_, frame) in enumerate(parts)],
+            how="diagonal",
+        )
+        rewritten, counts = anonymize_statistics_frame(combined)
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_name(target.name + ".tmp")
-        rewritten.write_csv(tmp)
-        tmp.replace(target)
+        for i, (path, frame) in enumerate(parts):
+            out = target if i == 0 else target.with_name(path.name)
+            tmp = out.with_name(out.name + ".tmp")
+            rewritten.filter(pl.col(_PART_COLUMN) == str(i)).select(frame.columns).write_csv(tmp)
+            tmp.replace(out)
         result = AnonymizeResult(
             dest=target,
             n_rows=rewritten.height,

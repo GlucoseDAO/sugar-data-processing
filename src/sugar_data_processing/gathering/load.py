@@ -34,6 +34,47 @@ def _redact_literal_sources(cell: Any, parser: Any) -> str | None:
         cleaned.append(row)
     return str(cleaned)
 
+#: Games the server rotated out of the live export, kept as dated files beside it.
+ARCHIVE_GLOB: str = "archived_*.csv"
+#: Column ``read_statistics_csv`` adds when asked: the file each run was read from.
+EXPORT_FILE_COLUMN: str = "export_file"
+
+
+def statistics_csv_paths(path: Path | str) -> list[Path]:
+    """The export plus every ``archived_*.csv`` beside it, the export first.
+
+    The archives hold real study games that are not in the live export
+    (``archived_2026-08-19.csv`` covers 17–19 August), so every reader of the
+    export reads them too.
+    """
+    main = Path(path)
+    archives = sorted(
+        candidate
+        for candidate in main.parent.glob(ARCHIVE_GLOB)
+        if candidate.is_file() and candidate.resolve() != main.resolve()
+    )
+    return [main, *archives]
+
+
+def read_statistics_csv(
+    path: Path | str,
+    *,
+    with_origin: bool = False,
+    **read_options: Any,
+) -> pl.DataFrame:
+    """The export and its archives as one frame; a run in both keeps the export's row."""
+    frames: list[pl.DataFrame] = []
+    for csv_path in statistics_csv_paths(path):
+        frame = pl.read_csv(csv_path, **read_options)
+        if with_origin:
+            frame = frame.with_columns(pl.lit(csv_path.name).alias(EXPORT_FILE_COLUMN))
+        frames.append(frame)
+    combined = frames[0] if len(frames) == 1 else pl.concat(frames, how="diagonal_relaxed")
+    if len(frames) > 1 and "run_id" in combined.columns:
+        combined = combined.unique(subset="run_id", keep="first", maintain_order=True)
+    return combined
+
+
 REQUIRED_COLUMNS: list[str] = [
     "study_id",
     "run_id",
@@ -78,14 +119,26 @@ def load_prediction_statistics(
     * three-state bools (blank stays unknown, not False)
 
     Email / location / raw upload filenames are dropped so downstream artefacts
-    stay pseudonymized (study design §5.2).
+    stay pseudonymized (study design §5.2). Archived games beside the export
+    (:func:`statistics_csv_paths`) are read with it; their study IDs were never
+    linked by email, so each counts as its own person.
     """
     csv_path = Path(path)
     with start_action(action_type="gathering.load_prediction_statistics", path=str(csv_path)) as action:
         if not csv_path.exists():
             raise FileNotFoundError(f"Statistics CSV not found: {csv_path}")
 
-        raw = pl.read_csv(csv_path, infer_schema_length=10_000)
+        raw = read_statistics_csv(csv_path, with_origin=True, infer_schema_length=10_000)
+        archived = raw[EXPORT_FILE_COLUMN] != csv_path.name
+        if "participant_key" in raw.columns and bool(archived.any()):
+            raw = raw.with_columns(
+                pl.when(archived & pl.col("participant_key").is_null())
+                .then(pl.col("study_id").cast(pl.Utf8))
+                .otherwise(pl.col("participant_key"))
+                .alias("participant_key")
+            )
+        n_archived = int(archived.sum())
+        raw = raw.drop(EXPORT_FILE_COLUMN)
         missing = [c for c in REQUIRED_COLUMNS if c not in raw.columns]
         if missing:
             raise ValueError(f"CSV missing required columns: {missing}")
@@ -182,6 +235,7 @@ def load_prediction_statistics(
             n_participants=df["study_id"].n_unique(),
             formats=df["format"].unique().to_list(),
             has_round_context="round_context" in df.columns,
+            n_archived_runs=n_archived,
         )
         return df
 
@@ -189,9 +243,12 @@ def load_prediction_statistics(
 # Re-exported so existing ``from sugar_data_processing.gathering.load import parse_per_round_metrics``
 # callers keep working.
 __all__ = [
+    "ARCHIVE_GLOB",
     "REQUIRED_COLUMNS",
     "OPTIONAL_COLUMNS",
     "load_prediction_statistics",
+    "read_statistics_csv",
+    "statistics_csv_paths",
     "parse_per_round_metrics",
     "parse_round_context",
 ]
