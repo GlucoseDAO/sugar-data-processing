@@ -22,7 +22,6 @@ from sugar_data_processing.config import (
 MODEL_PERSISTENCE: str = "persistence"
 MODEL_LINEAR: str = "linear"
 MODEL_GLUMIND: str = "glumind"
-MODEL_SUGAR_ONE: str = "sugar_one"
 MODEL_CITRAS: str = "citras"
 MODEL_CITRAS_W38_2: str = "citras_w38_2"
 MODEL_KRONLSTM: str = KRONLSTM_MODEL_NAME
@@ -220,8 +219,8 @@ def pick_primary_model(predictions: pl.DataFrame) -> str:
     if predictions.height == 0:
         return PRIMARY_MODEL_NAME
     names = set(predictions["model_name"].to_list())
-    if MODEL_GLUMIND in names or MODEL_SUGAR_ONE in names:
-        return MODEL_GLUMIND if MODEL_GLUMIND in names else MODEL_SUGAR_ONE
+    if MODEL_GLUMIND in names:
+        return MODEL_GLUMIND
     if MODEL_LINEAR in names:
         return MODEL_LINEAR
     return MODEL_PERSISTENCE

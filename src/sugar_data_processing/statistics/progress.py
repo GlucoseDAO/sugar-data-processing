@@ -71,13 +71,12 @@ MODEL_LABELS: dict[str, str] = {
     "persistence": "Persistence",
     "linear": "Linear trend",
     "glumind": "GluMind",
-    "sugar_one": "SugarOne",
     "citras": "CITRAS-FM W38.7",
     "citras_w38_2": "CITRAS-FM W38.2",
     "kronlstm": "KronLSTM R.80",
 }
 TRAINED_MODELS: frozenset[str] = frozenset(
-    {"glumind", "sugar_one", "citras", "citras_w38_2", "kronlstm"}
+    {"glumind", "citras", "citras_w38_2", "kronlstm"}
 )
 MIN_REPLAYED_PLAYERS: int = 30
 

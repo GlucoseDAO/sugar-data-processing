@@ -837,6 +837,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       font-size: 0.9rem;
       color: var(--text);
     }
+    label.legend-item { cursor: pointer; user-select: none; }
+    label.legend-item input { margin: 0; width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
+    label.legend-item.off { opacity: 0.45; }
     .swatch {
       width: 42px;
       height: 0;
@@ -1162,7 +1165,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       </section>
       <section>
         <h2>How errors grow over the hidden hour</h2>
-        <p class="prose">The black line at 0% is the real CGM value. Each shaded band shows how far forecasts landed above (+) or below (−) it, minute by minute: the band's edges are the most extreme rounds and the thicker line inside is the median. Narrower bands closer to 0% are better. Each model gets its own row of three panels (tasks A, B, C).</p>
+        <p class="prose">The black line at 0% is the real CGM value. Each shaded band shows how far forecasts landed above (+) or below (−) it, minute by minute: the band's edges are the most extreme rounds and the thicker line inside is the median. Narrower bands closer to 0% are better. Each model gets its own row of three panels (tasks A, B, C). Untick a model to hide its row.</p>
+        <div class="legend-grid" id="aiDevModels"></div>
         <div class="legend-grid" id="aiDevLegend"></div>
         <div id="aiDevHost"></div>
       </section>
@@ -1171,7 +1175,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div id="tab-people" class="tab-panel">
       <section>
         <h2>One player at a time</h2>
-        <p class="prose">Every reconstructed round for one player (up to 12). The thick dark line is the real CGM; everything right of the dotted "forecast starts" line was hidden from the player. Blue is the player's drawing; other colours are the algorithms. Use Previous / Next or the arrow keys to move between players.</p>
+        <p class="prose">Every reconstructed round for one player (up to 12). The thick dark line is the real CGM; everything right of the dotted "forecast starts" line was hidden from the player. Blue is the player's drawing; other colours are the algorithms. Untick a line in the legend to hide it from every chart on this tab. Use Previous / Next or the arrow keys to move between players.</p>
         <div class="legend-grid" id="lineLegend"></div>
         <div id="missingModel" class="missing-model" hidden></div>
         <div class="people-toolbar">
@@ -1242,17 +1246,18 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       persistence: "rect",
       linear: "rectRot",
       glumind: "star",
-      sugar_one: "star",
       citras: "crossRot",
       citras_w38_2: "cross",
       kronlstm: "triangle",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "sugar_one", "citras", "citras_w38_2", "kronlstm"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "citras", "citras_w38_2", "kronlstm"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
     let lightboxFocus = null;
     const aiCohortOn = new Set(Object.keys(DATA.cohort_labels || {}));
+    // Forecast lines the reader unticked in a legend; the real CGM line always stays.
+    const lineOff = new Set();
 
     Chart.defaults.font.family = "Lato, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
     Chart.defaults.font.size = 13;
@@ -1634,7 +1639,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const comps = ((DATA.h6 || {}).comparisons || []).filter((c) => num(c.model_mean_mae) !== null);
       if (!card || !comps.length) return;
       card.hidden = false;
-      const trained = comps.some((c) => ["glumind", "sugar_one", "citras", "citras_w38_2", "kronlstm"].includes(c.model_name));
+      const trained = comps.some((c) => ["glumind", "citras", "citras_w38_2", "kronlstm"].includes(c.model_name));
       const models = availableModels();
       const classes = [
         { key: "all", label: "All traces", color: "#334155" },
@@ -1825,16 +1830,20 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <table><thead><tr><th>Forecaster</th><th>Pooled MAE (mg/dL)</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    function legendEntry(key, toggle) {
+      const style = (DATA.line_styles || {})[key] || { color: "#64748b", label: modelLabel(key) };
+      const body = `<span class="swatch solid" style="border-top-color:${style.color}"></span><span><strong>${esc(style.label || key)}</strong></span>`;
+      if (!toggle) return `<div class="legend-item">${body}</div>`;
+      const on = !lineOff.has(key);
+      return `<label class="legend-item${on ? "" : " off"}"><input type="checkbox" data-line="${esc(key)}"${on ? " checked" : ""} />${body}</label>`;
+    }
+
     function renderLegend() {
+      const models = availableModels();
       const box = document.getElementById("lineLegend");
-      if (!box) return;
-      const styles = DATA.line_styles || {};
-      box.innerHTML = Object.entries(styles).map(([_key, style]) => `
-        <div class="legend-item">
-          <span class="swatch solid" style="border-top-color:${style.color}"></span>
-          <span><strong>${style.label}</strong></span>
-        </div>
-      `).join("");
+      if (box) box.innerHTML = legendEntry("actual", false) + ["human"].concat(models).map((key) => legendEntry(key, true)).join("");
+      const aiBox = document.getElementById("aiDevModels");
+      if (aiBox) aiBox.innerHTML = '<span class="legend-item"><strong>Models shown:</strong></span>' + models.map((key) => legendEntry(key, true)).join("");
     }
 
     function playerMatches(traceId, player) {
@@ -1886,14 +1895,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function showMissingModel(ids) {
       const note = document.getElementById("missingModel");
-      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.sugar_one || t.models.citras || t.models.citras_w38_2 || t.models.kronlstm));
+      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.citras || t.models.citras_w38_2 || t.models.kronlstm));
       if (haveDeep || !ids.length) {
         note.hidden = true;
         note.textContent = "";
         return;
       }
       note.hidden = false;
-      note.textContent = "Purple GluMind / SugarOne is missing because it was not scored. The sibling repo has GluMind weights in test_model, but this environment does not have torch loaded. Persistence (orange) and linear (green) are the AI lines present now.";
+      note.textContent = "Purple GluMind is missing because it was not scored. The sibling repo has GluMind weights in test_model, but this environment does not have torch loaded. Persistence (orange) and linear (green) are the AI lines present now.";
     }
 
     function lineSeries(label, values, key) {
@@ -1964,17 +1973,15 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           const bit = String(t).slice(11, 16);
           return bit || String(idx);
         });
-        const datasets = [
-          lineSeries("Human", trace.human, "human"),
-        ];
-        modelKeys(trace).forEach((name) => {
+        const datasets = lineOff.has("human") ? [] : [lineSeries("Human", trace.human, "human")];
+        modelKeys(trace).filter((name) => !lineOff.has(name)).forEach((name) => {
           datasets.push(lineSeries(name, trace.models[name], name));
         });
         datasets.push(lineSeries("Actual CGM", trace.actual, "actual"));
         upsertChart(canvas.id, "line", { labels, datasets }, {
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { display: i === 0, position: "bottom", labels: { usePointStyle: true, boxWidth: 10 } },
+            legend: { display: false },
             forecastGate: { index: Number(trace.visible_end || 0) },
           },
           scales: {
@@ -2111,7 +2118,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           });
         });
         const datasets = [];
-        const names = ["human"].concat(availableModels().filter((name) => (byName[name] || []).length));
+        const names = ["human"].concat(availableModels().filter((name) => (byName[name] || []).length))
+          .filter((name) => !lineOff.has(name));
         names.forEach((name) => {
           const style = (DATA.line_styles || {})[name] || { color: "#64748b", label: name };
           pushErrorBand(
@@ -2165,7 +2173,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         if (!aiCohortOn.has(player.cohort || "unknown")) return false;
         return allowed.has(player.study_id_full || player.study_id) || allowed.has(player.study_id);
       });
-      const models = availableModels();
+      const models = availableModels().filter((name) => !lineOff.has(name));
       const cohortKeys = Object.keys(DATA.cohort_labels || {});
       if (legend) {
         legend.innerHTML = cohortKeys.map((key) => `
@@ -2183,6 +2191,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         `;
       }
       destroyChartsByPrefix("aiDev-");
+      if (!models.length && availableModels().length) {
+        host.innerHTML = '<p class="note">Every model is unticked. Tick one above to show its row.</p>';
+        return;
+      }
       const modelBlocks = models.length ? models : ["human_only"];
       host.innerHTML = modelBlocks.map((model) => {
         const title = model === "human_only"
@@ -3154,6 +3166,21 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         renderAiDeviations(rows);
       });
     }
+    function toggleLine(event) {
+      const input = event.target.closest("input[data-line]");
+      if (!input) return;
+      if (input.checked) lineOff.delete(input.dataset.line);
+      else lineOff.add(input.dataset.line);
+      renderLegend();
+      if (DATA.milestone) return;
+      const rows = filtered(DATA.players);
+      renderAiDeviations(rows);
+      renderPersonStrip();
+    }
+    ["lineLegend", "aiDevModels"].forEach((id) => {
+      const host = document.getElementById(id);
+      if (host) host.addEventListener("change", toggleLine);
+    });
     function snapMix(raw) {
       const n = Number(raw);
       if (Math.abs(n - 50) <= 8) return 50;

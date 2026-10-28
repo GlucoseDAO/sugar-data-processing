@@ -24,6 +24,8 @@ REQUIRED_MODEL_COLUMNS: tuple[str, ...] = (
 )
 
 JOIN_KEYS: tuple[str, ...] = ("study_id", "run_id", "round_number", "point_index")
+# SugarOne is GluMind's earlier name; older prediction files still use it.
+MODEL_ALIASES: dict[str, str] = {"sugar_one": "glumind"}
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,7 @@ def load_model_predictions(path: Path | str) -> pl.DataFrame:
         pl.col("run_id").cast(pl.Utf8),
         pl.col("round_number").cast(pl.Int64),
         pl.col("point_index").cast(pl.Int64),
-        pl.col("model_name").cast(pl.Utf8),
+        pl.col("model_name").cast(pl.Utf8).replace(MODEL_ALIASES),
         pl.col("model_predicted_mgdl").cast(pl.Float64, strict=False),
         pl.col("evaluation_mode").cast(pl.Utf8),
     )

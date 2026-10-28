@@ -125,7 +125,7 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
         "outcome": "Person- or segment-level MAE in mg/dL",
         "method": (
             "Rebuild the same 3-hour window, convert to the glucose-forecasting "
-            "layout, score persistence / linear / SugarOne (when present), then "
+            "layout, score persistence / linear / GluMind (when present), then "
             "paired person-level MAE (human vs each model). α = 0.05."
         ),
         "section": "§7.4 / merged report",

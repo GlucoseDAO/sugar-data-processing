@@ -197,7 +197,7 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
             "**Status:** no model scores on reconstructed windows yet. "
             "The pipeline rebuilds the 3-hour game slice, converts it to the "
             "glucose-forecasting CSV layout, and scores persistence / linear "
-            "(plus SugarOne when that sibling checkout is present).\n"
+            "(plus GluMind when that sibling checkout is present).\n"
         )
     if result is None:
         return header + (

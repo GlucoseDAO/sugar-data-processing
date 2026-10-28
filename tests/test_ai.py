@@ -11,7 +11,7 @@ from sugar_data_processing.ai.export import export_prediction_sequences
 from sugar_data_processing.ai.citras import CITRAS_CHANNELS, featurize_forward_window
 from sugar_data_processing.ai.score import MODEL_CITRAS, MODEL_CITRAS_W38_2, MODEL_GLUMIND, score_windows
 from sugar_data_processing.ai.sequences import known_data_rounds
-from sugar_data_processing.ai.ingest import ingest_model_predictions
+from sugar_data_processing.ai.ingest import ingest_model_predictions, load_model_predictions
 from sugar_data_processing.ai.report import write_ai_report
 from sugar_data_processing.ai.traces import (
     LINE_STYLES,
@@ -124,8 +124,10 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     html = (tmp_path / "out" / "reports" / "explorer.html").read_text(encoding="utf-8")
     assert 'data-tab="people"' in html
     assert "Actual CGM" in html
-    assert "#be123c" in html
-    assert "#4338ca" in html
+    assert LINE_STYLES["citras"]["color"] in html
+    assert LINE_STYLES["citras_w38_2"]["color"] in html
+    assert 'data-line="' in html
+    assert "sugar_one" not in html
     assert "nextPerson" in html
     assert "line_styles" in html
     assert "aiTaskMae" in html
@@ -155,6 +157,21 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert '"milestone": true' in milestone
     assert 'data-tab="ai"' not in milestone
     assert 'data-tab="people"' not in milestone
+
+
+def test_sugar_one_predictions_load_as_glumind(tmp_path: Path) -> None:
+    path = tmp_path / "preds.csv"
+    pl.DataFrame(
+        {
+            "study_id": ["s1", "s1"],
+            "run_id": ["r1", "r1"],
+            "round_number": [1, 1],
+            "point_index": [0, 0],
+            "model_name": ["sugar_one", "linear"],
+            "model_predicted_mgdl": [120.0, 118.0],
+        }
+    ).write_csv(path)
+    assert load_model_predictions(path)["model_name"].to_list() == [MODEL_GLUMIND, "linear"]
 
 
 def test_round_traces_keep_actual_human_and_model_series() -> None:
