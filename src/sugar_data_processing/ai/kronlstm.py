@@ -26,13 +26,13 @@ from eliot import start_action
 
 from sugar_data_processing.ai.citras import _HF_TOKEN_KEYS, _load_hf_token_from_dotenv
 from sugar_data_processing.ai.windows import PlayedWindow
-from sugar_data_processing.config import FORECAST_HORIZON_POINTS, REPO_ROOT
+from sugar_data_processing.config import (
+    FORECAST_HORIZON_POINTS,
+    KRONLSTM_CACHE_DIR,
+    KRONLSTM_HF_REPO,
+)
 
 KRONLSTM_MODEL_NAME: str = "kronlstm"
-KRONLSTM_HF_REPO: str = (
-    "GlucoseDao/WHAT_IF_FORECAST-KronLSTM-R.80-10h-planned_bolus-physio_consistency"
-)
-KRONLSTM_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "kronlstm_r80"
 KRONLSTM_CHANNELS: tuple[str, ...] = ("glucose", "basal", "bolus", "carbs")
 _BUNDLE_FILES: tuple[str, ...] = ("history.onnx", "decode.onnx", "onnx_meta.json")
 

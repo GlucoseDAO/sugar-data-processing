@@ -138,6 +138,11 @@ CITRAS_W38_2_HF_REPO: str = (
     "GlucoseDao/DUAL_MODE-CITRAS-FM-W38.2-120h_past-116h_post-threemodes-threesource-ilet3-s42"
 )
 CITRAS_W38_2_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "citras_w38_2"
+# Streamed KronLSTM R.80 (history.onnx + decode.onnx), exported by arm R.115.
+KRONLSTM_HF_REPO: str = (
+    "GlucoseDao/WHAT_IF_FORECAST-KronLSTM-R.80-10h-planned_bolus-physio_consistency"
+)
+KRONLSTM_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "kronlstm_r80"
 CITRAS_PAST_STEPS: int = 1440
 CITRAS_GAP_STEPS: int = 48
 CITRAS_POST_STEPS: int = 1392
