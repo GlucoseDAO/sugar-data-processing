@@ -30,10 +30,15 @@ def _effect(mean_difference: float, sd: float) -> float:
 
 def _two_sided_power(df: float, noncentrality: float, alpha: float) -> float:
     critical = stats.t.isf(alpha / 2.0, df)
-    return float(
-        stats.nct.sf(critical, df, noncentrality)
-        + stats.nct.cdf(-critical, df, noncentrality)
-    )
+    upper = stats.nct.sf(critical, df, noncentrality)
+    lower = stats.nct.cdf(-critical, df, noncentrality)
+    # scipy's noncentral t returns NaN far out in a tail, e.g. the lower tail once
+    # power is near 1; the normal approximation is accurate there.
+    if not isfinite(upper):
+        upper = stats.norm.sf(critical - noncentrality)
+    if not isfinite(lower):
+        lower = stats.norm.cdf(-critical - noncentrality)
+    return float(min(1.0, upper + lower))
 
 
 def independent_t_power(

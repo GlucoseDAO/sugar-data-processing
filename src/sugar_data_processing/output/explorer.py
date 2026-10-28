@@ -963,11 +963,11 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <h2>How many players do we need?</h2>
         <div class="pair-flat">
           <div>
-            <p class="lead"><b>Statistical power</b> is the chance that the study detects a real difference of <span id="effectLabel">3.5</span> mg/dL between two groups. Studies usually aim for 80%.</p>
+            <p class="lead"><b>Statistical power</b> is the chance that the study detects a real effect of the size each question is planned for: a <span id="effectLabel">3.5</span> mg/dL difference between two groups for H1–H2, a correlation of 0.25 for H3–H4, and a 3 mg/dL difference within the same person for <span id="pairedCodes">H5–H6</span>. Studies usually aim for 80%.</p>
             <ul class="howto">
-              <li>Each line shows power rising as both groups grow.</li>
-              <li>Coloured lines use the spread of errors we actually observe; the grey line is the cautious planning assumption.</li>
-              <li>Large dots mark where each question stands today. Unequal groups count like smaller equal groups.</li>
+              <li>Each line shows power rising as more people count for that question: eligible players for H1–H2 (split into two equal groups), people with a known duration for H3–H4, and people with both scores for <span id="pairedCodesList">H5–H6</span>.</li>
+              <li>Lines say whether they use the spread we actually observe or a planning assumption; the grey line is the cautious H1–H2 planning assumption.</li>
+              <li>Large dots mark where each question stands today. For H1–H2, unequal groups count like fewer people split evenly.</li>
               <li>The dashed line is the 80% goal.</li>
             </ul>
           </div>
@@ -1482,6 +1482,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       }
       document.getElementById("whyTarget").innerHTML = why.join("");
       document.getElementById("effectLabel").textContent = P.planned_effect;
+      const pairedCodes = power.H6 ? "H5–H6" : "H5";
+      document.getElementById("pairedCodes").textContent = pairedCodes;
+      document.getElementById("pairedCodesList").textContent = pairedCodes;
 
       renderDesign(P);
       renderPowerCurve(P);
@@ -1517,9 +1520,17 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function renderPowerCurve(P) {
       const curves = P.curves || {};
-      const sizes = curves.group_sizes || [];
+      const sizes = curves.people || [];
       if (!sizes.length) return;
-      const palette = { H1: COLORS.diabetic_cgm, H2: "#2185d0", plan: "#94a3b8" };
+      const palette = {
+        H1: COLORS.diabetic_cgm,
+        H2: "#2185d0",
+        H3: "#F58518",
+        H4: "#54A24B",
+        H5: "#B279A2",
+        H6: "#9D755D",
+        plan: "#94a3b8",
+      };
       const datasets = (curves.series || []).map((series) => ({
         label: series.label,
         data: sizes.map((n, i) => ({ x: n, y: 100 * series.values[i] })),
@@ -1527,7 +1538,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         borderColor: palette[series.code] || "#64748b",
         backgroundColor: palette[series.code] || "#64748b",
         borderWidth: series.code === "plan" ? 2 : 3,
-        borderDash: series.code === "plan" ? [6, 4] : [],
+        borderDash: series.code === "plan" ? [6, 4] : series.shared ? [8, 8] : [],
+        // A line that coincides with an earlier one is dashed and drawn on top so both show.
+        order: series.shared ? -1 : 0,
         pointRadius: 0,
         pointHoverRadius: 0,
         pointStyle: "line",
@@ -1548,7 +1561,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       (curves.now || []).forEach((pt) => {
         datasets.push({
           label: pt.code + " today",
-          data: [{ x: pt.n_per_group, y: 100 * pt.power }],
+          today: pt,
+          data: [{ x: pt.people, y: 100 * pt.power }],
           backgroundColor: palette[pt.code] || "#334155",
           borderColor: "#ffffff",
           borderWidth: 2,
@@ -1558,16 +1572,28 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       });
       upsertChart("powerCurve", "scatter", { datasets }, {
         plugins: {
-          legend: { position: "bottom" },
+          legend: {
+            position: "bottom",
+            labels: {
+              filter: (item, data) => !data.datasets[item.datasetIndex].today,
+              sort: (a, b) => a.datasetIndex - b.datasetIndex,
+            },
+          },
           tooltip: {
             filter: (item) => item.dataset.pointRadius > 0,
             callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)}% power, like two groups of ${Math.round(ctx.parsed.x)}`,
+              label: (ctx) => {
+                const pt = ctx.dataset.today;
+                const people = pt.kind === "groups"
+                  ? `like two equal groups of ${Math.round(ctx.parsed.x / 2)}`
+                  : `${Math.round(ctx.parsed.x)} people`;
+                return `${pt.code} today: ${Math.round(ctx.parsed.y)}% power, ${people}`;
+              },
             },
           },
         },
         scales: {
-          x: { type: "linear", min: 0, max: sizes[sizes.length - 1], title: { display: true, text: "Eligible players in each of the two groups" } },
+          x: { type: "linear", min: 0, max: sizes[sizes.length - 1], title: { display: true, text: "People counted for the question (H1–H2: both groups together)" } },
           y: { min: 0, max: 100, title: { display: true, text: "Power: chance to detect a real difference" }, ticks: { callback: (v) => v + "%" } },
         },
       });
@@ -1580,6 +1606,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         H3: "Years with diabetes",
         H4: "Years using a CGM",
         H5: "Own vs public data",
+        H6: "People vs algorithms",
       };
       const rows = (P.power || []).map((row) => {
         const sig = row.significant === true ? '<span class="pill good">significant</span>' : row.p_value !== null && row.p_value !== undefined ? '<span class="pill">not significant</span>' : "";
@@ -1594,6 +1621,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           result = row.observed === null || row.observed === undefined ? "not run yet" : `r = ${row.observed >= 0 ? "+" : ""}${row.observed.toFixed(2)}<small>${pFmt(row.p_value)} ${sig}</small>`;
           needed = `${row.need_total} people<small>to detect r = 0.25</small>`;
           if (row.need_if_real && !row.significant) needed += `<small>if today's r is real: ${row.need_if_real}</small>`;
+        } else if (row.kind === "algorithms") {
+          now = `${row.n_now}<small>replayed on the same windows</small>`;
+          result = num(row.mean_human) === null ? "—" : `people ${row.mean_human.toFixed(1)} vs ${esc(row.model_label)} ${row.mean_model.toFixed(1)} mg/dL<small>${pFmt(row.p_value)} ${sig}</small><small>best of ${row.n_models} algorithms; ${row.n_significant} differ significantly from people</small>`;
+          needed = `${row.need_total} people<small>to detect 3 mg/dL, ${num(row.sd) === null ? "planning" : "widest observed"} spread SD ${row.difference_sd.toFixed(1)}</small>`;
         } else {
           now = `${row.n_now}<small>with 6+ rounds of each kind</small>`;
           result = row.mean_own === null || row.mean_own === undefined ? "not run yet" : `own ${row.mean_own.toFixed(1)} vs public ${row.mean_generic.toFixed(1)} mg/dL<small>${pFmt(row.p_value)} ${sig}</small>`;
@@ -1612,7 +1643,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <thead><tr><th>Question</th><th>Players now</th><th>Result today</th><th>Power today</th><th>Players needed</th><th>Still to recruit</th></tr></thead>
         <tbody>${rows}</tbody>`;
       document.getElementById("powerNote").textContent =
-        `Power assumes a real difference of ${P.planned_effect} mg/dL for H1–H2 (two-sided, p < ${P.primary_alpha}), a correlation of 0.25 for H3–H4 and a 3 mg/dL difference for H5 (p < 0.05). ` +
+        `Power assumes a real difference of ${P.planned_effect} mg/dL for H1–H2 (two-sided, p < ${P.primary_alpha}), a correlation of 0.25 for H3–H4 and a 3 mg/dL difference for ${power.H6 ? "H5–H6" : "H5"} (p < 0.05). ` +
+        (power.H6 ? "The analysis plan sets no power target for H6; its row only shows how many replayed players a 3 mg/dL difference would need, across every algorithm. " : "") +
         "These are planning estimates from t-tests and standard approximations; they do not cover redesigned or mixed-effects analyses.";
 
       const reachable = (P.power || []).filter((row) => !row.significant).map((row) => {

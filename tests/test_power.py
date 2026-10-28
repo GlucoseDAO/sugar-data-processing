@@ -62,3 +62,9 @@ def test_invalid_planning_inputs() -> None:
         required_correlation_n(0)
     with pytest.raises(ValueError):
         enrollment_for_eligible(350, unusable_fraction=1)
+
+
+def test_power_near_one_is_a_number_not_nan() -> None:
+    # scipy's noncentral t gives NaN for the far lower tail at these sizes.
+    assert paired_t_power(500, mean_difference=3.0, difference_sd=6.0) == pytest.approx(1.0)
+    assert independent_t_power(400, 400, mean_difference=3.5, sd=4.0) == pytest.approx(1.0)

@@ -35,6 +35,45 @@ def test_recruitment_counts_eligible_people_against_quotas(tmp_path: Path) -> No
     assert progress["curves"]["series"][-1]["code"] == "plan"
 
 
+def test_power_chart_draws_every_question_on_one_people_axis(tmp_path: Path) -> None:
+    h6 = {"comparisons": [
+        {"model_name": "persistence", "n": 40, "human_mean_mae": 21.0, "model_mean_mae": 16.0,
+         "mean_diff": 5.0, "sd_diff": 9.0, "p_value": 0.001, "significant": True},
+        {"model_name": "kronlstm", "n": 40, "human_mean_mae": 21.0, "model_mean_mae": 14.0,
+         "mean_diff": 7.0, "sd_diff": 11.0, "p_value": 0.001, "significant": True},
+    ]}
+    _, progress = _progress(tmp_path, h6=h6)
+    power = {row["code"]: row for row in progress["power"]}
+    assert set(power) == {"H1", "H2", "H3", "H4", "H5", "H6"}
+    h6_row = power["H6"]
+    assert h6_row["model_label"] == "KronLSTM R.80"
+    assert h6_row["difference_sd"] == 11.0
+    assert h6_row["need_total"] > h6_row["n_now"] == 40
+    curves = progress["curves"]
+    drawn = {series["code"] for series in curves["series"]}
+    assert {"H3", "H4", "H5", "H6", "plan"} <= drawn
+    h4 = next(series for series in curves["series"] if series["code"] == "H4")
+    assert h4["shared"] and "same line as H3" in h4["label"]
+    for series in curves["series"]:
+        assert len(series["values"]) == len(curves["people"])
+        assert all(a <= b + 1e-9 for a, b in zip(series["values"], series["values"][1:]))
+    dots = {pt["code"]: pt for pt in curves["now"]}
+    assert dots["H6"]["people"] == 40
+    assert dots["H1"]["people"] == 2 * power["H1"]["n_effective"]
+
+
+def test_h6_power_without_a_measured_spread_uses_the_h5_planning_sd(tmp_path: Path) -> None:
+    h6 = {"comparisons": [{"model_name": "persistence", "n": 40, "human_mean_mae": 21.0,
+                           "model_mean_mae": 16.0, "p_value": 0.001, "significant": True}]}
+    _, progress = _progress(tmp_path, h6=h6)
+    h6_row = next(row for row in progress["power"] if row["code"] == "H6")
+    h5_row = next(row for row in progress["power"] if row["code"] == "H5")
+    assert h6_row["sd"] is None
+    assert h6_row["difference_sd"] == h5_row["difference_sd"]
+    label = next(s["label"] for s in progress["curves"]["series"] if s["code"] == "H6")
+    assert "planning spread" in label
+
+
 def test_trace_matching_and_design_use_per_trace_counts(tmp_path: Path) -> None:
     people, progress = _progress(tmp_path)
     assert {"mae_generic_diabetic_data", "n_rounds_generic_nondiabetic_data"} <= set(people.columns)

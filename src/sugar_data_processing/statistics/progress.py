@@ -8,6 +8,7 @@ a favourable observed difference would only chase significance.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from math import ceil, isfinite, sqrt
 from typing import Any
 
@@ -57,7 +58,9 @@ CELL_TARGETS: dict[str, int] = {
     COHORT_NONDIABETIC_CGM: 60,
     COHORT_NONDIABETIC_NON_CGM: 100,
 }
-CURVE_GROUP_SIZES: list[int] = list(range(5, 255, 5))
+# People counted by a question; H1/H2 split them into two equal groups. Paired
+# questions reach 80% within a few dozen people, so the start is finer.
+CURVE_PEOPLE: list[int] = [*range(4, 50, 2), *range(50, 510, 10)]
 # The app gives players with diabetes mostly diabetic traces, which are harder,
 # so H1 is also checked on one kind of trace at a time. The within-person
 # difficulty check uses the 24 October audit's exploratory 3-round threshold.
@@ -143,6 +146,9 @@ def study_progress(
             _correlation_power("H4", "Years using a CGM vs accuracy", suite.get("h4")),
             _paired_power(participants, suite.get("h5")),
         ]
+        algorithms = _algorithm_power(h6 or {})
+        if algorithms is not None:
+            rows.append(algorithms)
         payload = {
             "linked_identities": linked_identities,
             "model_labels": MODEL_LABELS,
@@ -168,7 +174,7 @@ def study_progress(
             "primary_alpha": PRIMARY_ALPHA,
             "target_power": TARGET_POWER,
             "power": rows,
-            "curves": _power_curves([h1, h2]),
+            "curves": _power_curves(rows),
             "trace_matched": matched,
             "design": _design_check(participants, primary),
             "findings": _findings(suite, rows, matched, h6 or {}, benchmarks or {}),
@@ -403,6 +409,7 @@ def _paired_power(participants: pl.DataFrame, result: dict[str, Any] | None) -> 
         "title": "Own data vs public data (same person)",
         "n_now": n,
         "sd": sd,
+        "difference_sd": PAIRED_PLANNING_SD,
         "observed": None if not result else result.get("mean_diff"),
         "mean_generic": None if not result else result.get("mean_a"),
         "mean_own": None if not result else result.get("mean_b"),
@@ -420,38 +427,108 @@ def _paired_power(participants: pl.DataFrame, result: dict[str, Any] | None) -> 
     }
 
 
+def _algorithm_power(h6: dict[str, Any]) -> dict[str, Any] | None:
+    """H6 sized like H5: a 3 mg/dL paired difference, on the widest spread across algorithms.
+
+    The analysis plan makes no power claim for H6; this row only shows how far the
+    replayed players go. Without a measured spread it falls back to H5's planning SD.
+    """
+    comparisons = [c for c in (h6.get("comparisons") or []) if c.get("model_mean_mae") is not None]
+    if not comparisons:
+        return None
+    best = min(comparisons, key=lambda c: c["model_mean_mae"])
+    n = max(int(c.get("n") or 0) for c in comparisons)
+    spreads = [float(c["sd_diff"]) for c in comparisons if c.get("sd_diff")]
+    sd = max(spreads) if spreads else None
+    difference_sd = sd or PAIRED_PLANNING_SD
+    need = required_paired_n(mean_difference=PAIRED_EFFECT, difference_sd=difference_sd)
+    return {
+        "code": "H6",
+        "kind": "algorithms",
+        "title": "People vs algorithms (same windows)",
+        "n_now": n,
+        "sd": sd,
+        "difference_sd": difference_sd,
+        "model_label": _model_label(best),
+        "mean_human": best.get("human_mean_mae"),
+        "mean_model": best["model_mean_mae"],
+        "observed": best.get("mean_diff"),
+        "p_value": best.get("p_value"),
+        "significant": best.get("significant"),
+        "n_models": len(comparisons),
+        "n_significant": sum(1 for c in comparisons if c.get("significant")),
+        "alpha": ALPHA,
+        "power_now": _safe(paired_t_power, n, mean_difference=PAIRED_EFFECT, difference_sd=difference_sd)
+        if n >= 2
+        else None,
+        "need_total": need,
+        "still_needed": max(0, need - n),
+    }
+
+
+def _curve(row: dict[str, Any]) -> tuple[str, Callable[[int], float]] | None:
+    """Legend label and power for ``n`` people counted by this question."""
+    code, kind = row["code"], row["kind"]
+    if kind == "groups":
+        sd = row.get("sd")
+        if not sd:
+            return None
+        return f"{code} · observed spread (SD {sd:.1f})", lambda n: independent_t_power(
+            n // 2, n // 2, mean_difference=CLINICALLY_MEANINGFUL_MAE_DIFF, sd=sd, alpha=PRIMARY_ALPHA
+        )
+    if kind == "correlation":
+        return f"{code} · correlation {CORRELATION_TARGET_R}", lambda n: correlation_power(
+            n, CORRELATION_TARGET_R
+        )
+    difference_sd = row["difference_sd"]
+    source = "observed" if difference_sd == row.get("sd") else "planning"
+    return f"{code} · {source} spread (SD {difference_sd:.1f})", lambda n: paired_t_power(
+        n, mean_difference=PAIRED_EFFECT, difference_sd=difference_sd
+    )
+
+
 def _power_curves(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    effect = CLINICALLY_MEANINGFUL_MAE_DIFF
+    """Power against the people each question counts, so every question shares one axis."""
     series: list[dict[str, Any]] = []
     for row in rows:
-        if not row.get("sd"):
+        curve = _curve(row)
+        if curve is None:
             continue
-        series.append(
-            {
-                "label": f"{row['code']} · observed spread (SD {row['sd']:.1f})",
-                "code": row["code"],
-                "values": [
-                    independent_t_power(n, n, mean_difference=effect, sd=row["sd"], alpha=PRIMARY_ALPHA)
-                    for n in CURVE_GROUP_SIZES
-                ],
-            }
-        )
+        label, power = curve
+        values = [power(n) for n in CURVE_PEOPLE]
+        # H3 and H4 share a planned effect, so one line would hide the other; the page dashes it.
+        twin = next((s for s in series if s["values"] == values), None)
+        if twin is not None:
+            label += f" (same line as {twin['code']})"
+        series.append({"label": label, "code": row["code"], "values": values, "shared": twin is not None})
     series.append(
         {
-            "label": f"Planning assumption (SD {PLANNING_SD:.0f})",
+            "label": f"H1–H2 planning assumption (SD {PLANNING_SD:.0f})",
             "code": "plan",
             "values": [
-                independent_t_power(n, n, mean_difference=effect, sd=PLANNING_SD, alpha=PRIMARY_ALPHA)
-                for n in CURVE_GROUP_SIZES
+                independent_t_power(
+                    n // 2,
+                    n // 2,
+                    mean_difference=CLINICALLY_MEANINGFUL_MAE_DIFF,
+                    sd=PLANNING_SD,
+                    alpha=PRIMARY_ALPHA,
+                )
+                for n in CURVE_PEOPLE
             ],
         }
     )
+    # Unequal groups count like fewer people split evenly (twice the harmonic mean).
     now = [
-        {"code": row["code"], "n_per_group": row["n_effective"], "power": row["power_now"]}
+        {
+            "code": row["code"],
+            "kind": row["kind"],
+            "people": 2 * row["n_effective"] if row["kind"] == "groups" else row["n_now"],
+            "power": row["power_now"],
+        }
         for row in rows
         if row.get("power_now") is not None
     ]
-    return {"group_sizes": CURVE_GROUP_SIZES, "series": series, "now": now}
+    return {"people": CURVE_PEOPLE, "series": series, "now": now}
 
 
 def _p(p: float | None) -> str:

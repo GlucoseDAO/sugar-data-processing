@@ -158,6 +158,7 @@ def h6_human_vs_models(
         payload["model_name"] = name
         payload["human_mean_mae"] = float(paired["mae_primary"].mean() or 0.0)
         payload["model_mean_mae"] = float(paired["mae_model"].mean() or 0.0)
+        payload["sd_diff"] = (paired["mae_primary"] - paired["mae_model"]).std()
         comparisons.append(payload)
     return {
         "status": "scored" if comparisons else "empty",
