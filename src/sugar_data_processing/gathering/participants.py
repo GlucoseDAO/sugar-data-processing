@@ -163,7 +163,9 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
         )
         same_trait = _trait_side_mae(rounds, opposite=False, prefix="same_trait")
         opposite_trait = _trait_side_mae(rounds, opposite=True, prefix="opposite_trait")
-        challenge_history = _challenge_history(runs)
+        # Scored runs only, like the other-group flag: a challenge run that a later run of the
+        # same format replaced has no rounds left in any score.
+        challenge_flags = _challenge_flags(latest)
         trait_flags = _trait_flags(rounds)
 
         participants = (
@@ -178,7 +180,7 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             .join(generic_nondiabetic, on="study_id", how="left")
             .join(same_trait, on="study_id", how="left")
             .join(opposite_trait, on="study_id", how="left")
-            .join(challenge_history, on="study_id", how="left")
+            .join(challenge_flags, on="study_id", how="left")
             .join(trait_flags, on="study_id", how="left")
             .with_columns(
                 pl.col("n_rounds_generic").fill_null(0).cast(pl.Int64),
@@ -263,7 +265,7 @@ def all_format_population(participants: pl.DataFrame) -> pl.DataFrame:
     return participants.filter(pl.col("played_all_formats"))
 
 
-def _challenge_history(runs: pl.DataFrame) -> pl.DataFrame:
+def _challenge_flags(runs: pl.DataFrame) -> pl.DataFrame:
     if "challenge_unknown" not in runs.columns:
         return runs.select("study_id").unique().with_columns(
             pl.lit(False).alias("played_challenge_unknown")

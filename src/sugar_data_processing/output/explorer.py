@@ -213,6 +213,7 @@ def _player_rows(participants: pl.DataFrame) -> list[dict[str, Any]]:
                 "cgm_duration_years": row.get("cgm_duration_years"),
                 "cgm_duration_months": row.get("cgm_duration_months"),
                 "n_runs": int(row.get("n_runs") or 0),
+                "n_rounds": int(row.get("n_rounds_total") or 0),
                 "n_formats": int(row.get("n_formats_played") or 0),
                 "formats": _formats_label(row.get("formats_played")),
                 "repeat": bool(row.get("is_repeat_player")),
@@ -902,6 +903,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   </header>
   <main>
     <div class="stats" id="stats" hidden></div>
+    <p class="note" id="statsNote" hidden></p>
     <div class="filters" id="sharedFilters" hidden>
       <label>Group
         <select id="cohortFilter"><option value="all">All groups</option></select>
@@ -937,7 +939,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
       <section class="card" id="designCard" hidden>
         <h2>Design check: who saw which glucose traces?</h2>
-        <p class="lead">By default the game shows players with diabetes diabetic traces and everyone else non-diabetic traces. Only players who choose "challenge the unknown" also see the other kind. A fair comparison needs both groups on the <b>same</b> kind of trace, so the off-default cells (yellow) matter most.</p>
+        <p class="lead">Since mid-August 2026 the game shows players with diabetes diabetic traces and everyone else non-diabetic traces; before that every public trace was diabetic, so players without diabetes who played then saw the other kind without choosing it. Now only players who choose "challenge the unknown" also see the other kind. A fair comparison needs both groups on the <b>same</b> kind of trace, so the off-default cells (yellow) matter most.</p>
         <div class="pair-flat even">
           <div class="table-scroll"><table class="design" id="designTable"></table></div>
           <div id="designVerdict"></div>
@@ -1316,6 +1318,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         const filterable = btn.dataset.tab !== "overview";
         document.getElementById("sharedFilters").hidden = !filterable;
         document.getElementById("stats").hidden = !filterable;
+        document.getElementById("statsNote").hidden = !filterable;
       });
     });
 
@@ -2388,6 +2391,22 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="stat"><b>${betterOwn}/${allFormats.length || 0}</b><span>better on own data (played A, B and C)</span></div>
         <div class="stat"><b>${(DATA.traces || []).length}</b><span>rounds replayed for AI</span></div>
       `;
+      // The two tiles answer different questions: the checkbox, and the traces a player was shown.
+      const otherOnly = rows.filter((p) => p.opposite_trait && !p.challenge_unknown);
+      const challengeOnly = rows.filter((p) => p.challenge_unknown && !p.opposite_trait);
+      const parts = [];
+      if (otherOnly.length) {
+        const noDiabetes = otherOnly.filter((p) => p.diabetic === false).length;
+        parts.push(`<b>${otherOnly.length}</b> predicted the other group without choosing the challenge (${noDiabetes} of them have no diabetes, and until mid-August 2026 the game showed every player diabetic traces).`);
+      }
+      if (challengeOnly.length) {
+        const noRounds = challengeOnly.filter((p) => !p.n_rounds).length;
+        parts.push(`<b>${challengeOnly.length}</b> chose the challenge but saved no round on the other kind of trace (${noRounds} of them saved no rounds at all).`);
+      }
+      const both = rows.filter((p) => p.opposite_trait && p.challenge_unknown).length;
+      document.getElementById("statsNote").innerHTML = parts.length
+        ? `"Predicted the other group" counts the traces a player was shown, not the checkbox, so it is not the same set as "challenge the unknown": <b>${both}</b> players did both. ${parts.join(" ")}`
+        : "";
     }
 
     function renderSwarmBundle(prefix, rows) {
