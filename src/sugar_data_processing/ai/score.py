@@ -8,11 +8,12 @@ import numpy as np
 import polars as pl
 from eliot import start_action
 
-from sugar_data_processing.ai import citras, kronlstm
+from sugar_data_processing.ai import citras, kronlstm, timestral
 from sugar_data_processing.ai.cache import ForecastCache, Forecasts, bundle_fingerprint, files_fingerprint
 from sugar_data_processing.ai.citras import ensure_citras_bundle, score_citras_windows
 from sugar_data_processing.ai.convert import pad_context, write_ml_ready_csv
 from sugar_data_processing.ai.kronlstm import KRONLSTM_MODEL_NAME, ensure_kronlstm_bundle, score_kronlstm_windows
+from sugar_data_processing.ai.timestral import TIMESTRAL_MODEL_NAME, ensure_timestral_bundle, score_timestral_windows
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
     CITRAS_MODELS,
@@ -27,6 +28,7 @@ MODEL_LINEAR: str = "linear"
 MODEL_GLUMIND: str = "glumind"
 MODEL_CITRAS_W38_2: str = "citras_w38_2"
 MODEL_KRONLSTM: str = KRONLSTM_MODEL_NAME
+MODEL_TIMESTRAL: str = TIMESTRAL_MODEL_NAME
 
 
 def score_windows(
@@ -43,7 +45,8 @@ def score_windows(
     sibling glucose-forecasting checkout can load ``test_model`` and torch.
     ``citras_w38_2`` is added when its dual-mode ONNX bundle is on disk or
     downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed R.80, two ONNX
-    graphs) is added on the same terms.
+    graphs) and ``timestral`` (Timestral-28M R.81, one forecast-mode graph)
+    are added on the same terms.
 
     With ``cache_path``, trained-model forecasts of windows scored before with the
     same model files are read back instead of recomputed.
@@ -56,6 +59,7 @@ def score_windows(
         deep = _score_glumind_batch(windows, forecasting_root, cache)
         citras_by_model = _score_citras(windows, cache)
         kronlstm_preds = _score_kronlstm(windows, cache)
+        timestral_preds = _score_timestral(windows, cache)
         cache.save()
         for window in windows:
             preds = {
@@ -70,6 +74,8 @@ def score_windows(
                     preds[model_name] = by_key[key]
             if key in kronlstm_preds:
                 preds[MODEL_KRONLSTM] = kronlstm_preds[key]
+            if key in timestral_preds:
+                preds[MODEL_TIMESTRAL] = timestral_preds[key]
             for model_name, values in preds.items():
                 for index, value in enumerate(values):
                     rows.append(
@@ -145,6 +151,18 @@ def _score_kronlstm(windows: list[PlayedWindow], cache: ForecastCache) -> Foreca
         bundle_fingerprint(folder, Path(kronlstm.__file__)),
         windows,
         lambda missing: score_kronlstm_windows(missing, bundle_dir=folder),
+    )
+
+
+def _score_timestral(windows: list[PlayedWindow], cache: ForecastCache) -> Forecasts:
+    folder = ensure_timestral_bundle() if windows else None
+    if folder is None:
+        return {}
+    return cache.score(
+        MODEL_TIMESTRAL,
+        bundle_fingerprint(folder, Path(timestral.__file__)),
+        windows,
+        lambda missing: score_timestral_windows(missing, bundle_dir=folder),
     )
 
 

@@ -141,6 +141,11 @@ KRONLSTM_HF_REPO: str = (
     "GlucoseDao/WHAT_IF_FORECAST-KronLSTM-R.80-10h-planned_bolus-physio_consistency"
 )
 KRONLSTM_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "kronlstm_r80"
+# Timestral-28M R.81 (one forecast-mode model.onnx), exported by arm R.118.
+TIMESTRAL_HF_REPO: str = (
+    "GlucoseDao/WHAT_IF_FORECAST-Timestral_28M-R.81-2h-announced_meals-physio_consistency"
+)
+TIMESTRAL_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "timestral_r81"
 CITRAS_PAST_STEPS: int = 1440
 CITRAS_GAP_STEPS: int = 48
 CITRAS_POST_STEPS: int = 1392

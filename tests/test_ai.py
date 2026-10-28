@@ -125,9 +125,11 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert "Actual CGM" in html
     assert LINE_STYLES["citras_w38_2"]["color"] in html
     assert "CitricSugar" in html
-    assert "KronSugar" in html
+    assert "Kronsugar" in html
+    assert "Sugarstral" in html
     assert "CITRAS-FM" not in html
     assert "KronLSTM" not in html
+    assert "Timestral" not in html
     assert "GluMind" not in html
     assert 'data-line="' in html
     assert 'id="aiGlanceModels"' in html

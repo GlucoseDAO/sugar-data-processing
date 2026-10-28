@@ -48,8 +48,9 @@ def _as_float(value: object) -> float | None:
     return number
 
 
-# One hue family per line: KronSugar was teal beside the green linear line and
+# One hue family per line: Kronsugar was teal beside the green linear line and
 # CitricSugar indigo beside the player's blue, and readers mixed them up.
+# Sugarstral takes the one family left, mustard yellow, apart from persistence's orange.
 # Labels are the names the paper uses, not the technical model names.
 LINE_STYLES: dict[str, dict[str, str]] = {
     "actual": {"color": "#0f172a", "dash": "solid", "label": "Actual CGM"},
@@ -58,7 +59,8 @@ LINE_STYLES: dict[str, dict[str, str]] = {
     "linear": {"color": "#16a34a", "dash": "dashdot", "label": "AI linear"},
     "glumind": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne"},
     "citras_w38_2": {"color": "#0891b2", "dash": "solid", "label": "AI CitricSugar"},
-    "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI KronSugar"},
+    "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI Kronsugar"},
+    "timestral": {"color": "#ca8a04", "dash": "dashed", "label": "AI Sugarstral"},
 }
 
 

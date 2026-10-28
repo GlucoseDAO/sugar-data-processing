@@ -57,7 +57,7 @@ def test_short_game_history_pads_the_tail_in_front() -> None:
 
 def test_kronlstm_has_a_line_style() -> None:
     assert MODEL_KRONLSTM == "kronlstm"
-    assert LINE_STYLES[MODEL_KRONLSTM]["label"] == "AI KronSugar"
+    assert LINE_STYLES[MODEL_KRONLSTM]["label"] == "AI Kronsugar"
 
 
 def test_kronlstm_scores_real_windows() -> None:

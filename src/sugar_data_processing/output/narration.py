@@ -331,7 +331,7 @@ def explain_edition_and_ai_path() -> str:
         "1. **Export** — one row per forecast point.\n"
         "2. **Convert / score** — rebuild the 36-point window, write "
         "`ml_ready.csv`, score persistence, linear trend and whichever of GlucoseDAO's trained "
-        "models are available (CitricSugar, KronSugar, SugarOne).\n"
+        "models are available (CitricSugar, Kronsugar, SugarOne, Sugarstral).\n"
         "3. **Compare** — H6 is the paired human-vs-model test on those windows "
         "(evaluation mode: **post factum**; in-place live-game scores are not collected yet)."
     )
