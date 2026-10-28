@@ -24,8 +24,11 @@ REQUIRED_MODEL_COLUMNS: tuple[str, ...] = (
 )
 
 JOIN_KEYS: tuple[str, ...] = ("study_id", "run_id", "round_number", "point_index")
-# SugarOne is GluMind's earlier name; older prediction files still use it.
+# Some older prediction files call GluMind by its published name, SugarOne.
 MODEL_ALIASES: dict[str, str] = {"sugar_one": "glumind"}
+# CITRAS-FM W38.7 scored worse than W38.2 and is no longer compared; older
+# prediction files still carry it as ``citras``.
+RETIRED_MODELS: frozenset[str] = frozenset({"citras"})
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,7 @@ def load_model_predictions(path: Path | str) -> pl.DataFrame:
         raise ValueError(f"Model CSV missing required columns: {missing}")
     if "evaluation_mode" not in frame.columns:
         frame = frame.with_columns(pl.lit(EVALUATION_MODE_POST_FACTUM).alias("evaluation_mode"))
+    frame = frame.filter(~pl.col("model_name").cast(pl.Utf8).is_in(list(RETIRED_MODELS)))
     return frame.with_columns(
         pl.col("study_id").cast(pl.Utf8),
         pl.col("run_id").cast(pl.Utf8),

@@ -197,7 +197,7 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
             "**Status:** no model scores on reconstructed windows yet. "
             "The pipeline rebuilds the 3-hour game slice, converts it to the "
             "glucose-forecasting CSV layout, and scores persistence / linear "
-            "(plus GluMind when that sibling checkout is present).\n"
+            "(plus SugarOne when that sibling checkout is present).\n"
         )
     if result is None:
         return header + (
@@ -331,7 +331,7 @@ def explain_edition_and_ai_path() -> str:
         "1. **Export** — one row per forecast point.\n"
         "2. **Convert / score** — rebuild the 36-point window, write "
         "`ml_ready.csv`, score persistence, linear trend and whichever of GlucoseDAO's trained "
-        "models are available (CITRAS-FM, KronLSTM, GluMind).\n"
+        "models are available (CitricSugar, KronSugar, SugarOne).\n"
         "3. **Compare** — H6 is the paired human-vs-model test on those windows "
         "(evaluation mode: **post factum**; in-place live-game scores are not collected yet)."
     )

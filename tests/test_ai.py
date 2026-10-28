@@ -9,7 +9,7 @@ import pytest
 
 from sugar_data_processing.ai.export import export_prediction_sequences
 from sugar_data_processing.ai.citras import CITRAS_CHANNELS, featurize_forward_window
-from sugar_data_processing.ai.score import MODEL_CITRAS, MODEL_CITRAS_W38_2, MODEL_GLUMIND, score_windows
+from sugar_data_processing.ai.score import MODEL_CITRAS_W38_2, MODEL_GLUMIND, score_windows
 from sugar_data_processing.ai.sequences import known_data_rounds
 from sugar_data_processing.ai.ingest import ingest_model_predictions, load_model_predictions
 from sugar_data_processing.ai.report import write_ai_report
@@ -21,7 +21,6 @@ from sugar_data_processing.ai.traces import (
 )
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
-    CITRAS_MODELS,
     CITRAS_PAST_STEPS,
     CITRAS_SEQ_LEN,
     FORECASTING_ROOT_ENV,
@@ -124,8 +123,12 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     html = (tmp_path / "out" / "reports" / "explorer.html").read_text(encoding="utf-8")
     assert 'data-tab="people"' in html
     assert "Actual CGM" in html
-    assert LINE_STYLES["citras"]["color"] in html
     assert LINE_STYLES["citras_w38_2"]["color"] in html
+    assert "CitricSugar" in html
+    assert "KronSugar" in html
+    assert "CITRAS-FM" not in html
+    assert "KronLSTM" not in html
+    assert "GluMind" not in html
     assert 'data-line="' in html
     assert 'id="aiGlanceModels"' in html
     assert "sugar_one" not in html
@@ -173,6 +176,21 @@ def test_sugar_one_predictions_load_as_glumind(tmp_path: Path) -> None:
         }
     ).write_csv(path)
     assert load_model_predictions(path)["model_name"].to_list() == [MODEL_GLUMIND, "linear"]
+
+
+def test_retired_citras_w38_7_predictions_are_dropped(tmp_path: Path) -> None:
+    path = tmp_path / "preds.csv"
+    pl.DataFrame(
+        {
+            "study_id": ["s1", "s1"],
+            "run_id": ["r1", "r1"],
+            "round_number": [1, 1],
+            "point_index": [0, 0],
+            "model_name": ["citras", MODEL_CITRAS_W38_2],
+            "model_predicted_mgdl": [120.0, 118.0],
+        }
+    ).write_csv(path)
+    assert load_model_predictions(path)["model_name"].to_list() == [MODEL_CITRAS_W38_2]
 
 
 def test_round_traces_keep_actual_human_and_model_series() -> None:
@@ -262,19 +280,13 @@ def test_citras_scores_one_real_window() -> None:
         pytest.skip("CITRAS ONNX bundle is not on disk")
     scored = score_windows([_sample_window()])
     names = set(scored["model_name"].to_list())
-    assert MODEL_CITRAS in names
-    citras = scored.filter(pl.col("model_name") == MODEL_CITRAS)
+    assert MODEL_CITRAS_W38_2 in names
+    assert "citras" not in names
+    citras = scored.filter(pl.col("model_name") == MODEL_CITRAS_W38_2)
     assert citras.height == 12
     assert citras["model_predicted_mgdl"].null_count() == 0
     values = [float(v) for v in citras["model_predicted_mgdl"].to_list()]
     assert all(40.0 <= v <= 400.0 for v in values)
-    if find_citras_bundle(spec=CITRAS_MODELS[1]) is not None:
-        assert MODEL_CITRAS_W38_2 in names
-        w38_2 = scored.filter(pl.col("model_name") == MODEL_CITRAS_W38_2)
-        assert w38_2.height == 12
-        later = [float(v) for v in w38_2["model_predicted_mgdl"].to_list()]
-        assert all(40.0 <= v <= 400.0 for v in later)
-        assert later != values
 
 
 def test_forecasting_root_reads_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

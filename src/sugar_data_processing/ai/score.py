@@ -25,7 +25,6 @@ from sugar_data_processing.config import (
 MODEL_PERSISTENCE: str = "persistence"
 MODEL_LINEAR: str = "linear"
 MODEL_GLUMIND: str = "glumind"
-MODEL_CITRAS: str = "citras"
 MODEL_CITRAS_W38_2: str = "citras_w38_2"
 MODEL_KRONLSTM: str = KRONLSTM_MODEL_NAME
 
@@ -42,9 +41,9 @@ def score_windows(
     Always scores ``persistence`` (last visible value) and ``linear``
     (slope of the last six visible points). ``glumind`` is added when a
     sibling glucose-forecasting checkout can load ``test_model`` and torch.
-    ``citras`` / ``citras_w38_2`` are added when the matching dual-mode ONNX
-    bundle is on disk or downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed
-    R.80, two ONNX graphs) is added on the same terms.
+    ``citras_w38_2`` is added when its dual-mode ONNX bundle is on disk or
+    downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed R.80, two ONNX
+    graphs) is added on the same terms.
 
     With ``cache_path``, trained-model forecasts of windows scored before with the
     same model files are read back instead of recomputed.

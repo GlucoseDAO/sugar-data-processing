@@ -48,17 +48,17 @@ def _as_float(value: object) -> float | None:
     return number
 
 
-# One hue family per line: KronLSTM was teal beside the green linear line and
-# CITRAS W38.2 indigo beside the player's blue, and readers mixed them up.
+# One hue family per line: KronSugar was teal beside the green linear line and
+# CitricSugar indigo beside the player's blue, and readers mixed them up.
+# Labels are the names the paper uses, not the technical model names.
 LINE_STYLES: dict[str, dict[str, str]] = {
     "actual": {"color": "#0f172a", "dash": "solid", "label": "Actual CGM"},
     "human": {"color": "#2563eb", "dash": "dashed", "label": "Human"},
     "persistence": {"color": "#ea580c", "dash": "dotted", "label": "AI persistence"},
     "linear": {"color": "#16a34a", "dash": "dashdot", "label": "AI linear"},
-    "glumind": {"color": "#9333ea", "dash": "longdash", "label": "AI GluMind"},
-    "citras": {"color": "#92400e", "dash": "dashdot", "label": "AI CITRAS-FM (W38.7)"},
-    "citras_w38_2": {"color": "#0891b2", "dash": "solid", "label": "AI CITRAS-FM (W38.2)"},
-    "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI KronLSTM (R.80)"},
+    "glumind": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne"},
+    "citras_w38_2": {"color": "#0891b2", "dash": "solid", "label": "AI CitricSugar"},
+    "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI KronSugar"},
 }
 
 

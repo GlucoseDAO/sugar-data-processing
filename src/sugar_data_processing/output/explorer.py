@@ -987,7 +987,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
             <ul class="howto">
               <li><b>Persistence</b>: assumes glucose stays at its last value.</li>
               <li><b>Linear trend</b>: extends the recent slope.</li>
-              <li><b>CITRAS-FM / KronLSTM / GluMind</b>: GlucoseDAO's trained forecasting models, when scored.</li>
+              <li><b>CitricSugar / KronSugar / SugarOne</b>: GlucoseDAO's trained forecasting models, when scored.</li>
             </ul>
             <p class="note" id="aiGlanceNote"></p>
             <div class="legend-grid" id="aiGlanceModels"></div>
@@ -1249,11 +1249,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       persistence: "rect",
       linear: "rectRot",
       glumind: "star",
-      citras: "crossRot",
       citras_w38_2: "cross",
       kronlstm: "triangle",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "citras", "citras_w38_2", "kronlstm"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "citras_w38_2", "kronlstm"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
@@ -1675,7 +1674,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const comps = ((DATA.h6 || {}).comparisons || []).filter((c) => num(c.model_mean_mae) !== null);
       if (!card || !comps.length) return;
       card.hidden = false;
-      const trained = comps.some((c) => ["glumind", "citras", "citras_w38_2", "kronlstm"].includes(c.model_name));
+      const trained = comps.some((c) => ["glumind", "citras_w38_2", "kronlstm"].includes(c.model_name));
       const models = availableModels();
       const classes = [
         { key: "all", label: "All traces", color: "#334155" },
@@ -1938,14 +1937,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function showMissingModel(ids) {
       const note = document.getElementById("missingModel");
-      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.citras || t.models.citras_w38_2 || t.models.kronlstm));
+      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.citras_w38_2 || t.models.kronlstm));
       if (haveDeep || !ids.length) {
         note.hidden = true;
         note.textContent = "";
         return;
       }
       note.hidden = false;
-      note.textContent = "Purple GluMind is missing because it was not scored. The sibling repo has GluMind weights in test_model, but this environment does not have torch loaded. Persistence (orange) and linear (green) are the AI lines present now.";
+      note.textContent = "Purple SugarOne is missing because it was not scored. The sibling repo has its weights in test_model, but this environment does not have torch loaded. Persistence (orange) and linear (green) are the AI lines present now.";
     }
 
     function lineSeries(label, values, key) {

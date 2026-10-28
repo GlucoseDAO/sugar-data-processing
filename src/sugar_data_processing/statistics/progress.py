@@ -70,16 +70,17 @@ TRACE_CLASSES: dict[str, str] = {
 }
 MIN_CLASS_ROUNDS: int = MIN_GENERIC_SEGMENTS
 MIN_PAIRED_CLASS_ROUNDS: int = 3
+# The names the paper uses: GluMind is SugarOne, CITRAS-FM W38.2 is CitricSugar
+# and KronLSTM R.80 is KronSugar.
 MODEL_LABELS: dict[str, str] = {
     "persistence": "Persistence",
     "linear": "Linear trend",
-    "glumind": "GluMind",
-    "citras": "CITRAS-FM W38.7",
-    "citras_w38_2": "CITRAS-FM W38.2",
-    "kronlstm": "KronLSTM R.80",
+    "glumind": "SugarOne",
+    "citras_w38_2": "CitricSugar",
+    "kronlstm": "KronSugar",
 }
 TRAINED_MODELS: frozenset[str] = frozenset(
-    {"glumind", "citras", "citras_w38_2", "kronlstm"}
+    {"glumind", "citras_w38_2", "kronlstm"}
 )
 MIN_REPLAYED_PLAYERS: int = 30
 
@@ -759,7 +760,7 @@ def _findings(
         if not any(c["model_name"] in TRAINED_MODELS for c in comparisons):
             detail += (
                 " Only the simple baselines were scored in this build; GlucoseDAO's trained models "
-                "(CITRAS-FM, GluMind, KronLSTM) are not in this comparison yet."
+                "(CitricSugar, SugarOne, KronSugar) are not in this comparison yet."
             )
         # The study expects trained models to beat people: green when they do, red when
         # people beat them. Without trained scores, a clear baseline result is still useful.

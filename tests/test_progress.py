@@ -46,7 +46,7 @@ def test_power_chart_draws_every_question_on_one_people_axis(tmp_path: Path) -> 
     power = {row["code"]: row for row in progress["power"]}
     assert set(power) == {"H1", "H2", "H3", "H4", "H5", "H6"}
     h6_row = power["H6"]
-    assert h6_row["model_label"] == "KronLSTM R.80"
+    assert h6_row["model_label"] == "KronSugar"
     assert h6_row["difference_sd"] == 11.0
     assert h6_row["need_total"] > h6_row["n_now"] == 40
     curves = progress["curves"]

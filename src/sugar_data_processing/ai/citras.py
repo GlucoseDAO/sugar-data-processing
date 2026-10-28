@@ -1,4 +1,4 @@
-"""Score game windows with dual-mode CITRAS-FM ONNX inpainters (W38.7, W38.2).
+"""Score game windows with the dual-mode CITRAS-FM ONNX inpainter (W38.2).
 
 Each Hub bundle is a 2880-step gap filler (1440 past + 48 hidden + 1392 post),
 not stock ``CitrasFM.from_pretrained``. Sugar Sugar only has the 24 visible

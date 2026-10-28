@@ -87,7 +87,7 @@ OVH reads `/home/web/ops/sugar-data-processing/update.env`:
 
 ```dotenv
 SDP_INPUT_CSV=/home/web/ops/sugar-data-processing/inputs/prediction_statistics.csv
-SDP_REQUIRED_MODELS=citras,citras_w38_2,kronlstm
+SDP_REQUIRED_MODELS=citras_w38_2,kronlstm
 ```
 
 Keep the scrubbed, linked export and its `archived_*.csv` files in the `inputs`

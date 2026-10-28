@@ -130,11 +130,8 @@ FORECASTING_ROOT_CANDIDATES: tuple[Path, ...] = (
     REPO_ROOT.parent.parent / "glucose-forecasting",
 )
 
-# Dual-mode CITRAS-FM inpainters. Weights stay in gitignored data/raw/.
-CITRAS_HF_REPO: str = (
-    "GlucoseDao/DUAL_MODE-CITRAS-FM-W38.7-120h_past-116h_post-threemodes-hybridrefiner-ilet10-s43"
-)
-CITRAS_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "citras_w38_7"
+# Dual-mode CITRAS-FM inpainter W38.2. Weights stay in gitignored data/raw/.
+# W38.7 was dropped: on the game windows it scored worse (MAE 15.07 vs 14.97).
 CITRAS_W38_2_HF_REPO: str = (
     "GlucoseDao/DUAL_MODE-CITRAS-FM-W38.2-120h_past-116h_post-threemodes-threesource-ilet3-s42"
 )
@@ -160,7 +157,6 @@ class CitrasModelSpec:
 
 
 CITRAS_MODELS: tuple[CitrasModelSpec, ...] = (
-    CitrasModelSpec(name="citras", repo_id=CITRAS_HF_REPO, cache_dir=CITRAS_CACHE_DIR),
     CitrasModelSpec(
         name="citras_w38_2",
         repo_id=CITRAS_W38_2_HF_REPO,

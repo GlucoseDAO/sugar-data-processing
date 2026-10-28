@@ -30,6 +30,11 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
 | **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / GluMind (`torch` + a glucose-forecasting checkout with `test_model`, named by `GLUCOSE_FORECASTING_DIR` or found beside this repository) |
 
+The dashboard uses the model names the paper will use: **SugarOne** is GluMind,
+**CitricSugar** is CITRAS-FM W38.2 and **KronSugar** is KronLSTM R.80. CITRAS-FM
+W38.7 is no longer scored: on the game windows its MAE was 15.07 mg/dL against
+W38.2's 14.97 mg/dL.
+
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.
 
