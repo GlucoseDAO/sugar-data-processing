@@ -18,9 +18,11 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.config import (
+    ALPHA,
     COHORT_LABELS,
     MAX_PLAUSIBLE_CGM_YEARS,
     MAX_PLAUSIBLE_DIABETES_YEARS,
+    PRIMARY_ALPHA,
 )
 from sugar_data_processing.gathering.participants import (
     h5_paired_population,
@@ -153,15 +155,12 @@ def _empty_layer(hypothesis: str, participants: pl.DataFrame) -> LayeredHypothes
 
 def _own_population(participants: pl.DataFrame, notes: list[str], hypothesis: str) -> pl.DataFrame:
     own = own_analysis_population(participants)
-    if own.height >= 2:
-        return own
-    fallback = participants.filter(pl.col("mae_own").is_not_null())
-    if fallback.height >= 2:
+    if own.height < 2:
         notes.append(
-            f"{hypothesis} own-data layer used relaxed pairing "
-            f"(n={fallback.height}); strict ≥6 own segments not yet met."
+            f"{hypothesis} own-data layer has only {own.height} eligible participant(s); "
+            "the ≥6 valid own-segment threshold is not relaxed."
         )
-    return fallback
+    return own
 
 
 def run_all_hypotheses(participants: pl.DataFrame) -> HypothesisSuite:
@@ -228,6 +227,7 @@ def _run_group_layer(
         hypothesis=f"{hypothesis}:{layer}",
         label_a=label_a,
         label_b=label_b,
+        alpha=PRIMARY_ALPHA if hypothesis in {"H1", "H2"} and layer != "own" else ALPHA,
     )
 
 
@@ -460,20 +460,11 @@ def _run_h4(
 def _run_h5(participants: pl.DataFrame, notes: list[str]) -> PairedComparisonResult | None:
     paired = h5_paired_population(participants)
     if paired.height < 2:
-        fallback = participants.filter(
-            pl.col("mae_generic").is_not_null() & pl.col("mae_own").is_not_null()
-        )
-        if fallback.height < 2:
-            notes.append(
-                f"H5 skipped: need ≥2 participants with both own and generic MAE "
-                f"(strict eligible={paired.height}, any both={fallback.height})."
-            )
-            return None
         notes.append(
-            f"H5 used relaxed pairing (n={fallback.height}); "
-            "strict §7.2 threshold (≥6 segments each side) not yet met."
+            f"H5 skipped: need ≥2 participants with ≥6 valid segments each side "
+            f"(strict eligible={paired.height}); thresholds are not relaxed."
         )
-        paired = fallback
+        return None
     return paired_comparison(
         _series(paired, "mae_generic"),
         _series(paired, "mae_own"),

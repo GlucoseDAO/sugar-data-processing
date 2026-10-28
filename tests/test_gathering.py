@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import polars as pl
@@ -108,9 +109,9 @@ def test_blank_challenge_unknown_is_false(tmp_path: Path) -> None:
     raw.write_csv(csv_path)
     runs = load_prediction_statistics(csv_path)
     assert runs["challenge_unknown"].null_count() == 0
-    assert runs["challenge_unknown"][0] == False
-    assert runs["challenge_unknown"][1] == False
-    assert runs["challenge_unknown"][2] == True
+    assert runs["challenge_unknown"][0] is False
+    assert runs["challenge_unknown"][1] is False
+    assert runs["challenge_unknown"][2] is True
     rounds = build_round_table(runs)
     assert rounds["challenge_unknown"].null_count() == 0
     assert rounds["is_opposite_trait"].null_count() == 0
@@ -126,3 +127,46 @@ def test_blank_diabetic_stays_unknown(tmp_path: Path) -> None:
     people = build_participant_table(runs)
     assert people["diabetic"].null_count() == people.height
     assert set(people["cohort_category"].to_list()) == {"unknown"}
+
+
+def test_linked_ids_do_not_inflate_people_and_latest_demographics_win(tmp_path: Path) -> None:
+    csv_path = tmp_path / "stats.csv"
+    write_synthetic_csv(csv_path, n_participants=8, seed=4)
+    raw = pl.read_csv(csv_path).head(1).with_columns(
+        pl.lit("old-id").alias("study_id"),
+        pl.lit("old-run").alias("run_id"),
+        pl.lit("same-person").alias("participant_key"),
+        pl.lit("2026-01-01 10:00:00").alias("timestamp"),
+        pl.lit(True).alias("uses_cgm"),
+        pl.lit("A").alias("format"),
+    )
+    newer = raw.with_columns(
+        pl.lit("new-id").alias("study_id"),
+        pl.lit("new-run").alias("run_id"),
+        pl.lit("2026-02-01 10:00:00").alias("timestamp"),
+        pl.lit(False).alias("uses_cgm"),
+        pl.lit("B").alias("format"),
+    )
+    pl.concat([newer, raw]).write_csv(csv_path)
+    runs = load_prediction_statistics(csv_path)
+    people = build_participant_table(runs)
+    assert people.height == 1
+    assert people["uses_cgm"][0] is False
+    assert people["n_runs"][0] == 2
+    assert runs["original_study_id"].n_unique() == 2
+    assert load_prediction_statistics(csv_path, use_participant_keys=False)["study_id"].n_unique() == 2
+
+
+def test_unscored_rounds_do_not_count_towards_eligibility(tmp_path: Path) -> None:
+    csv_path = tmp_path / "stats.csv"
+    write_synthetic_csv(csv_path, n_participants=8, seed=4)
+    raw = pl.read_csv(csv_path).head(1)
+    metrics = ast.literal_eval(raw["per_round_metrics"][0])
+    assert len(metrics) >= 6
+    for index, metric in enumerate(metrics):
+        metric["mae"] = 10.0 if index < 5 else None
+        metric["is_example_data"] = True
+    raw.with_columns(pl.lit(str(metrics)).alias("per_round_metrics")).write_csv(csv_path)
+    person = build_participant_table(load_prediction_statistics(csv_path))
+    assert person["n_rounds_generic"][0] == 5
+    assert person["eligible_primary"][0] is False

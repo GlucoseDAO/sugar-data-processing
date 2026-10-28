@@ -33,6 +33,34 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.
 
+Primary H1/H2 comparisons use **two-sided α = 0.025** (Bonferroni for two
+primary hypotheses). Other layers are exploratory at nominal α = 0.05.
+See [corrected recruitment planning](docs/analysis-plan.md#corrected-recruitment-planning-24-october-2026)
+and [the dated data assessment](docs/interim-assessment-2026-10-24.md). Sample-size
+targets are conditional on effect size, variance, group balance, and eligibility;
+the committed synthetic fixture cannot establish those quantities for the study.
+
+The [published production briefing](https://sugar-sugar-study-briefing.just-dna-seq-0763.chatgpt.site)
+summarizes the 24 October 2026 audit in plain language. Production records run
+through 9 October: 207 runs, 184 browser IDs, 155 linked identity groups and
+109 primary-eligible identities (104 in the stricter quality sensitivity).
+The revised operational target is 320 eligible for a 3.5 mg/dL effect with
+planning SD 10, or 250 eligible for a 4 mg/dL effect. See the linked analysis
+plan for group quotas, recruitment attrition and assumptions.
+
+To regenerate the audit and briefing from the local scrubbed, identity-linked
+production CSV without model downloads:
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/assess_production.py
+```
+
+An optional `participant_key` column supplies pseudonymous identity linkage
+prepared before contact scrubbing. When present, the loader uses it as the
+analysis identity and preserves `original_study_id`; use
+`use_participant_keys=False` only for the explicit study-ID sensitivity.
+Without linkage, study-ID counts can overstate independent participants.
+
 ## What data it uses
 
 | Input | Path / source | Role |

@@ -10,8 +10,9 @@ from pathlib import Path
 MIN_GENERIC_SEGMENTS: int = 6
 MIN_OWN_SEGMENTS: int = 6
 
-# All hypothesis tests (study design §7.3–7.4)
+# Nominal exploratory level; §8 requires Bonferroni for the two primary tests.
 ALPHA: float = 0.05
+PRIMARY_ALPHA: float = ALPHA / 2.0
 SHAPIRO_NORMAL_P: float = 0.05
 
 # Format → data-source mapping used by sugar-sugar

@@ -18,8 +18,8 @@ STATS_GLOSSARY: str = """
 | --- | --- |
 | **MAE** | Mean absolute error (mg/dL). Average size of the prediction mistake. **Lower is better.** |
 | **Person-level MAE** | One MAE per participant (mean of their round MAEs). Avoids counting the same person many times. |
-| **p-value** | Chance of seeing a result at least this extreme if there were truly no effect. We call a result **significant** when p < 0.05. |
-| **Significant** | Evidence is strong enough (at α = 0.05) to reject “no difference / no association”. Not the same as “large” or “clinically important”. |
+| **p-value** | Probability of a result at least this extreme under the null hypothesis and the test assumptions. Primary H1/H2 use p < 0.025; exploratory tests use nominal p < 0.05. |
+| **Significant** | Meets the stated threshold. Does not establish a large, causal, or clinically important effect. Non-significance does not establish equivalence. |
 | **Effect size** | How big the difference or association is (not only whether it is “significant”). |
 | **t-test / Mann–Whitney** | Compare two independent groups. Mann–Whitney is used when data look non-normal. |
 | **Pearson / Spearman** | Correlation: does one quantity rise/fall with another? Spearman is rank-based (more robust). |
@@ -124,10 +124,11 @@ def _layer_result_block(title: str, result: dict[str, Any] | None) -> str:
     if result is None:
         return f"**{title}:** not run (usually because too few eligible participants).\n"
     significant = bool(result.get("significant"))
+    alpha = float(result.get("alpha", 0.05))
     sig_txt = (
-        "Yes — statistically significant at α = 0.05."
+        f"Yes — statistically significant at α = {alpha:g}."
         if significant
-        else "No — not statistically significant at α = 0.05."
+        else f"No — not statistically significant at α = {alpha:g}."
     )
     body = (
         f"**{title}**\n\n"
@@ -175,7 +176,7 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
             lookback = result.get("lookback") or ""
             return (
                 header
-                + f"**Status:** scored on the same 3-hour windows the humans played.\n\n"
+                + "**Status:** scored on the same 3-hour windows the humans played.\n\n"
                 + f"{lookback}\n\n"
                 + "| Model | Human MAE | Model MAE | Test | p |\n"
                 + "| --- | ---: | ---: | --- | --- |\n"
@@ -198,7 +199,7 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
         parts.append(
             _layer_result_block(
                 "Category comparison (person MAE)",
-                result.get("overall") if result.get("overall") is not None else result,
+                result.get("overall"),
             )
         )
         parts.append("\n")
@@ -208,10 +209,11 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
         return "".join(parts)
 
     significant = bool(result.get("significant"))
+    alpha = float(result.get("alpha", 0.05))
     sig_txt = (
-        "Yes — there is statistically significant evidence of an effect at α = 0.05."
+        f"Yes — there is statistically significant evidence of an effect at α = {alpha:g}."
         if significant
-        else "No — we do not have statistically significant evidence at α = 0.05."
+        else f"No — we do not have statistically significant evidence at α = {alpha:g}."
     )
     body = (
         "**How to read this result**\n\n"

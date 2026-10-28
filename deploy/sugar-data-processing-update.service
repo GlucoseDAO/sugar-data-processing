@@ -1,0 +1,16 @@
+[Unit]
+Description=Update the Sugar Sugar analysis dashboard from GitHub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=web
+Group=web
+WorkingDirectory=/home/web/sugar-data-processing
+ExecStart=/usr/bin/bash /home/web/ops/sugar-data-processing/update-dashboard.sh
+TimeoutStartSec=30min
+Nice=10
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true

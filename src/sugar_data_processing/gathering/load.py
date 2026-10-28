@@ -66,7 +66,9 @@ OPTIONAL_COLUMNS: list[str] = [
 ]
 
 
-def load_prediction_statistics(path: Path | str) -> pl.DataFrame:
+def load_prediction_statistics(
+    path: Path | str, *, use_participant_keys: bool = True
+) -> pl.DataFrame:
     """Read and coerce the sugar-sugar statistics export.
 
     Handles the current export encoding:
@@ -90,6 +92,23 @@ def load_prediction_statistics(path: Path | str) -> pl.DataFrame:
 
         drop_cols = [c for c in ("email", "location") if c in raw.columns]
         df = raw.drop(drop_cols) if drop_cols else raw
+
+        # Optional pseudonymous linkage prepared before contact fields are scrubbed.
+        # Resetting localStorage creates a new study_id for an existing person.
+        if use_participant_keys and "participant_key" in df.columns:
+            if df["participant_key"].null_count() or df.filter(
+                pl.col("participant_key").cast(pl.Utf8).str.strip_chars() == ""
+            ).height:
+                raise ValueError("participant_key must be present for every run")
+            inconsistent = df.group_by("study_id").agg(
+                pl.col("participant_key").n_unique().alias("n_keys")
+            ).filter(pl.col("n_keys") != 1)
+            if inconsistent.height:
+                raise ValueError("Each original study_id must map to one participant_key")
+            df = df.with_columns(
+                pl.col("study_id").alias("original_study_id"),
+                pl.col("participant_key").alias("study_id"),
+            )
 
         if "data_source_name" in df.columns:
             redacted = [redact_source_name(v) for v in df["data_source_name"].to_list()]

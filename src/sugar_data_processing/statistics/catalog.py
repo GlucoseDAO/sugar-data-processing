@@ -33,7 +33,9 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
         "method": (
             "Shapiro–Wilk normality check, then independent t-test if normal, "
             "otherwise Mann–Whitney U. Repeat on generic-data MAE and own-data MAE. "
-            "α = 0.05."
+            "Primary generic-data comparison: two-sided α = 0.025 (Bonferroni for H1/H2). "
+            "Overall repeats the same primary endpoint; own-data comparisons are exploratory "
+            "at nominal α = 0.05."
         ),
         "section": "§7.3 primary",
     },
@@ -51,7 +53,9 @@ HYPOTHESES: dict[str, HypothesisInfo] = {
         "outcome": "Person-level MAE in mg/dL (lower is better)",
         "method": (
             "Same path as H1: Shapiro–Wilk → independent t-test or Mann–Whitney U. "
-            "Repeat on generic-data MAE and own-data MAE. α = 0.05."
+            "Primary generic-data comparison: two-sided α = 0.025 (Bonferroni for H1/H2). "
+            "Overall repeats the same primary endpoint; own-data comparisons are exploratory "
+            "at nominal α = 0.05."
         ),
         "section": "§7.3 primary",
     },

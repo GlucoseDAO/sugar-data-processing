@@ -341,7 +341,7 @@ AI better on generic: **{int(cluster.get("ai_better_generic") or 0)}**.
 Mean |generic − own| gap: human **{_fmt_mae(cluster.get("human_mean_abs_gap"))}**,
 AI **{_fmt_mae(cluster.get("ai_mean_abs_gap"))}** (smaller = more stable).
 
-Models were fed only the 24 visible CGM points from the game (left-padded to 128).
+Models were fed only the 24 visible CGM points from the game; anything before them is marked missing.
 Own-data windows come from the files players uploaded (saved under sugar-sugar `data/input/users`).
 
 {_pair(
@@ -523,8 +523,8 @@ Interactive filters live in [`{EXPLORER_HTML}`]({EXPLORER_HTML}). The milestone 
 segments. Otherwise short incomplete sessions would dominate the results.
 
 - **Primary analyses (H1–H4):** ≥6 analyzable **generic** segments for the
-  overall / generic layers. The own-data layer uses ≥6 own segments (relaxed
-  if that threshold is not yet met).
+  overall / generic layers. The own-data layer uses ≥6 scored own segments.
+  Thresholds are not silently relaxed when samples are small.
 - **Own-data analyses:** ≥6 **own-data** segments.
 - **Own-vs-generic paired analysis (H5):** both thresholds.
 - **Reporting order for H1–H4:** results per diabetes × CGM category first,

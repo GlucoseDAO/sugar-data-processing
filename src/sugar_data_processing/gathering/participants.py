@@ -106,7 +106,9 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
     """
     with start_action(action_type="gathering.build_participant_table", n_runs=runs.height) as action:
         latest = _latest_runs(runs)
-        rounds = build_round_table(latest)
+        rounds = build_round_table(latest).filter(
+            pl.col("mae").is_finite() & (pl.col("mae") >= 0)
+        )
         history = _run_history(runs)
 
         demo_cols = [
@@ -125,7 +127,10 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             )
             if c in latest.columns
         ]
-        demographics = latest.select(demo_cols).group_by("study_id").last()
+        # group_by does not promise chronological output; picking the last format
+        # from `latest` made demographics depend on aggregation order.
+        demo_source = runs.sort("timestamp") if "timestamp" in runs.columns else runs
+        demographics = demo_source.select(demo_cols).group_by("study_id").last()
 
         generic = _source_mae(rounds, "generic", "generic")
         own = _source_mae(rounds, "own", "own")
