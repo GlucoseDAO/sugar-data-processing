@@ -1,10 +1,12 @@
 # OVH dashboard updates
 
-The dashboard at `https://data.sugar-sugar.study/` is served directly by Caddy.
-The server checks GitHub `origin/main` every five minutes using the systemd
-timer below. No Codex session or running laptop is needed.
+The dashboard at `https://data.sugar-sugar.study/` is static pages served
+directly by Caddy. Since 28 October 2026 they are built on the analysis laptop,
+which has every trained model, and uploaded with `deploy/publish-from-laptop.sh`
+(see below). OVH no longer rebuilds on its own: its timer is disabled, and the
+server rebuilds only when its update service is started by hand.
 
-The script runs as `web`, fast-forwards a clean checkout, installs the locked
+The server's update script runs as `web`, fast-forwards a clean checkout, installs the locked
 production dependencies, and builds from the configured study CSV. With no
 configuration it fetches the sibling production export. OVH uses a prepared,
 linked export so refreshing the code cannot replace person-level identities
@@ -54,9 +56,42 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now sugar-data-processing-update.timer
 ```
 
+## Publishing from the laptop
+
+```bash
+deploy/publish-from-laptop.sh
+```
+
+The script builds GitHub `origin/main` in a clean temporary checkout, so other
+work in the local checkout never reaches the dashboard. It reads, beside the main
+checkout:
+
+- `data/raw/prediction_statistics.csv` and its `archived_*.csv`: the same
+  prepared, linked export as OVH's `inputs/` directory, not a raw browser-ID fetch;
+- `../sugar-sugar/data/input/users`: the players' own-data uploads (gitignored);
+- `data/raw/hf_models/`: the CITRAS-FM W38.2, KronLSTM R.80 and Timestral R.81 bundles;
+- `../glucose-forecasting` (or `GLUCOSE_FORECASTING_DIR`): SugarOne 1.0.
+
+A build is published only if it scored `sugar_one`, `citras_w38_2`, `kronlstm` and
+`timestral` (override with `SDP_REQUIRED_MODELS`) and both pages pass the Node.js
+syntax check. It is uploaded as `releases/<time>-<revision>-laptop` and the `current`
+symlink is switched, as the server does; three releases are kept. `--dry-run` builds
+and checks without uploading and leaves the pages in `output/real_preview/`.
+Forecasts are cached in the main checkout's `data/processed/model_cache/`, so a
+rebuild scores only new or changed game windows.
+
+Players keep uploading their own data to the game on OVH. Copy the uploads to the
+laptop before publishing new study data:
+
+```bash
+ssh antonkulaga@ovh 'sudo -n tar -C /home/web/sugar-sugar/data/input/users -czf - .' | tar -C ../sugar-sugar/data/input/users -xzf -
+```
+
 ## Operations
 
-Check immediately:
+Rebuild on the server by hand, as `antonkulaga` (`web` has no sudo). This
+publishes a server build, which has only the models on the server (CITRAS-FM W38.2
+and KronLSTM R.80), in place of the laptop build:
 
 ```bash
 sudo systemctl start sugar-data-processing-update.service
@@ -75,7 +110,11 @@ systemctl list-timers sugar-data-processing-update.timer
 journalctl -u sugar-data-processing-update.service -n 50 --no-pager
 ```
 
-Disable automatic updates:
+Automatic updates are disabled. To turn them back on, or off again:
+
+```bash
+sudo systemctl enable --now sugar-data-processing-update.timer
+```
 
 ```bash
 sudo systemctl disable --now sugar-data-processing-update.timer
