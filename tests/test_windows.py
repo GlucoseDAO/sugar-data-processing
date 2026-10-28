@@ -11,7 +11,14 @@ import pytest
 
 from sugar_data_processing.ai.glucose import read_glucose_series
 from sugar_data_processing.ai.overlay import h6_human_vs_models
-from sugar_data_processing.ai.windows import locate_hidden_hour
+from sugar_data_processing.ai.source_files import public_corpus_files
+from sugar_data_processing.ai.windows import (
+    RECOVERED_FROM_OTHER_FILE,
+    cut_played_window,
+    load_series,
+    locate_hidden_hour,
+    played_round_key,
+)
 from sugar_data_processing.config import DEFAULT_SUGAR_SUGAR_ROOT
 
 SUGAR_SUGAR_DATA = DEFAULT_SUGAR_SUGAR_ROOT / "data"
@@ -99,3 +106,80 @@ def test_h6_pairs_people_and_models_on_the_same_rounds() -> None:
     assert comparison["human_mean_mae"] == pytest.approx(30.0)
     assert comparison["model_mean_mae"] == pytest.approx(20.125)
     assert "identical" in h6["pairing"]
+
+
+def _loop_file(root: Path, name: str, values: np.ndarray) -> Path:
+    path = root / "data" / "subjects" / name / f"{name}_chronological.csv"
+    path.parent.mkdir(parents=True)
+    rows = [f"{stamp:%Y-%m-%d %H:%M:%S},EGV,{value}," for stamp, value in zip(_stamps(values.size), values)]
+    path.write_text("Timestamp,Event Type,Glucose (mg/dL),Recommended Split\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    return path
+
+
+def _played_round(values: np.ndarray, start: int, *, fmt: str = "A", study_id: str = "p1") -> tuple[dict, pl.DataFrame]:
+    """A round whose recorded hidden hour is ``values[start:start + 12]``, saved under loop_1's name."""
+    meta = {
+        "study_id": study_id,
+        "run_id": f"{study_id}-{fmt}",
+        "round_number": 1,
+        "format": fmt,
+        "source": "generic",
+        "data_source_name": "loop_1_chronological.csv",
+        "window_start_index": None,
+    }
+    real = values[start : start + 12]
+    points = pl.DataFrame(
+        {
+            "point_index": list(range(12)),
+            "real_mgdl": real.tolist(),
+            "human_predicted_mgdl": (real + 5.0).tolist(),
+            "timestamp": [f"{stamp:%Y-%m-%d %H:%M:%S}" for stamp in _stamps(values.size)[start : start + 12]],
+        }
+    )
+    return meta, points
+
+
+def test_round_named_after_the_wrong_file_is_cut_from_the_one_that_holds_it(tmp_path: Path) -> None:
+    named = _loop_file(tmp_path, "loop_1", np.arange(100.0, 300.0))
+    holder = np.arange(400.0, 600.0)
+    _loop_file(tmp_path, "loop_2", holder)
+    meta, points = _played_round(holder, 80)
+    window, reason = cut_played_window(
+        meta, points, named, corpus=public_corpus_files(tmp_path), series_of=load_series
+    )
+    assert reason == RECOVERED_FROM_OTHER_FILE
+    assert window is not None and window.data_source_name == "loop_2_chronological.csv"
+    assert window.context_mgdl == holder[56:80].tolist()
+
+
+def test_hour_held_by_two_files_is_not_guessed(tmp_path: Path) -> None:
+    named = _loop_file(tmp_path, "loop_1", np.arange(100.0, 300.0))
+    holder = np.arange(400.0, 600.0)
+    _loop_file(tmp_path, "loop_2", holder)
+    _loop_file(tmp_path, "loop_3", holder)
+    meta, points = _played_round(holder, 80)
+    corpus = public_corpus_files(tmp_path)
+    assert set(corpus) == {"loop_1_chronological.csv", "loop_2_chronological.csv", "loop_3_chronological.csv"}
+    assert cut_played_window(meta, points, named, corpus=corpus, series_of=load_series) == (
+        None,
+        "values_in_several_sources",
+    )
+
+
+def test_own_data_round_is_not_searched_in_the_public_corpus(tmp_path: Path) -> None:
+    named = _loop_file(tmp_path, "loop_1", np.arange(100.0, 300.0))
+    holder = np.arange(400.0, 600.0)
+    _loop_file(tmp_path, "loop_2", holder)
+    meta, points = _played_round(holder, 80, fmt="B")
+    assert cut_played_window(meta, points, named, corpus={}, series_of=load_series) == (None, "values_not_in_source")
+
+
+def test_a_round_carried_into_another_run_is_the_same_played_round() -> None:
+    values = np.arange(100.0, 300.0)
+    meta_a, points_a = _played_round(values, 80, fmt="A")
+    meta_c, points_c = _played_round(values, 80, fmt="C")
+    assert played_round_key(meta_a, points_a) == played_round_key(meta_c, points_c)
+    redrawn = points_c.with_columns(pl.col("human_predicted_mgdl") + 1.0)
+    assert played_round_key(meta_a, points_a) != played_round_key(meta_c, redrawn)
+    other_person, _ = _played_round(values, 80, study_id="p2")
+    assert played_round_key(meta_a, points_a) != played_round_key(other_person, points_a)

@@ -134,6 +134,24 @@ def resolve_source_path(
     return _find_upload(root, original)
 
 
+def public_corpus_files(sugar_root: Path | None = None) -> dict[str, Path]:
+    """Every published trace on disk, keyed by the file name the game records for it."""
+    data = sugar_sugar_root(sugar_root) / "data"
+    names = {"example.csv"}
+    for folder in (data / "d1namo" / "diabetes_subset_pictures-glucose-food-insulin", data / "d1namo"):
+        names |= {f"D1NAMO-{p.name}.csv" for p in _subfolders(folder) if p.name.isdigit()}
+    names |= {f"BIGIDEAS-{p.name}.csv" for p in _subfolders(data / "bigideas") if p.name.isdigit()}
+    if (data / "bigideas").is_dir():
+        names |= {p.name for p in (data / "bigideas").glob("BIGIDEAS-*.csv")}
+    names |= {f"{p.name}_chronological.csv" for p in _subfolders(data / "subjects") if p.name.startswith("loop_")}
+    found = {name: resolve_source_path(name, sugar_root=sugar_root) for name in sorted(names)}
+    return {name: path for name, path in found.items() if path is not None}
+
+
+def _subfolders(folder: Path) -> list[Path]:
+    return [p for p in folder.iterdir() if p.is_dir()] if folder.is_dir() else []
+
+
 def _find_upload(root: Path, original_name: str) -> Path | None:
     folder = users_dir(root)
     if not folder.exists() or not original_name:
