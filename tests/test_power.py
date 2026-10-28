@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from sugar_data_processing.statistics.power import (
+    correlation_power,
     enrollment_for_eligible,
     independent_t_power,
+    paired_t_power,
     required_correlation_n,
     required_independent_n,
     required_paired_n,
@@ -39,6 +41,12 @@ def test_secondary_targets_and_enrollment() -> None:
     assert required_correlation_n(0.25) == 124
     assert required_correlation_n(-0.20) == 194
 
+
+def test_power_helpers_agree_with_required_sizes() -> None:
+    assert paired_t_power(34, mean_difference=3, difference_sd=6) >= 0.8
+    assert paired_t_power(33, mean_difference=3, difference_sd=6) < 0.8
+    assert correlation_power(124, 0.25) == pytest.approx(0.8, abs=0.01)
+    assert correlation_power(25, -0.25) < 0.3
     assert enrollment_for_eligible(350) == 389
     assert enrollment_for_eligible(350, unusable_fraction=0) == 350
 

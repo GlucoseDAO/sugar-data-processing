@@ -16,7 +16,6 @@ first hour of the 10-hour forecast.
 from __future__ import annotations
 
 import json
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,7 +23,7 @@ from typing import Any
 import numpy as np
 from eliot import start_action
 
-from sugar_data_processing.ai.citras import _HF_TOKEN_KEYS, _load_hf_token_from_dotenv
+from sugar_data_processing.ai.citras import _has_hf_token, _load_hf_token_from_dotenv
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
     FORECAST_HORIZON_POINTS,
@@ -71,15 +70,6 @@ def ensure_kronlstm_bundle(explicit: Path | None = None) -> Path | None:
         allow_patterns=[*_BUNDLE_FILES, "ONNX.md", "README.md", "tuning_meta.json", "best_info.json"],
     )
     return find_kronlstm_bundle(KRONLSTM_CACHE_DIR)
-
-
-def _has_hf_token() -> bool:
-    """An env/.env token, or a saved `hf auth login` on this machine."""
-    if any(os.environ.get(key) for key in _HF_TOKEN_KEYS):
-        return True
-    from huggingface_hub import get_token
-
-    return bool(get_token())
 
 
 def featurize_game_history(

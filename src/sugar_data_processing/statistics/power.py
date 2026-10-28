@@ -101,6 +101,21 @@ def required_independent_n(
     return n_a, second_group(n_a)
 
 
+def paired_t_power(
+    n: int,
+    *,
+    mean_difference: float,
+    difference_sd: float,
+    alpha: float = ALPHA,
+) -> float:
+    """Two-sided paired t-test power for n people with both conditions."""
+    _probability(alpha, "alpha")
+    effect = _effect(mean_difference, difference_sd)
+    if n < 2:
+        raise ValueError("A paired test needs at least two people")
+    return _two_sided_power(n - 1, effect * sqrt(n), alpha)
+
+
 def required_paired_n(
     *,
     mean_difference: float,
@@ -114,6 +129,18 @@ def required_paired_n(
     return _minimum_n(
         lambda n: _two_sided_power(n - 1, effect * sqrt(n), alpha), power
     )
+
+
+def correlation_power(n: int, correlation: float, *, alpha: float = ALPHA) -> float:
+    """Approximate two-sided Pearson power for n complete pairs (Fisher z)."""
+    _probability(alpha, "alpha")
+    if not isfinite(correlation) or not 0.0 < abs(correlation) < 1.0:
+        raise ValueError("Absolute correlation must be between 0 and 1, exclusively")
+    if n < 4:
+        raise ValueError("Fisher-z power needs at least four pairs")
+    shift = atanh(abs(correlation)) * sqrt(n - 3.0)
+    critical = stats.norm.isf(alpha / 2.0)
+    return float(stats.norm.sf(critical - shift) + stats.norm.cdf(-critical - shift))
 
 
 def required_correlation_n(

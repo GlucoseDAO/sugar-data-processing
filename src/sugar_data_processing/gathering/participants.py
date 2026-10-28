@@ -13,6 +13,8 @@ from sugar_data_processing.config import (
     COHORT_NONDIABETIC_CGM,
     COHORT_NONDIABETIC_NON_CGM,
     COHORT_UNKNOWN,
+    DATA_CLASS_DIABETIC,
+    DATA_CLASS_NONDIABETIC,
     FORMAT_GENERIC,
     FORMAT_MIXED,
     FORMAT_OWN,
@@ -49,6 +51,18 @@ def _format_mae(rounds: pl.DataFrame, format_code: str, prefix: str) -> pl.DataF
         .agg(
             pl.col("mae").mean().alias(f"mae_format_{prefix}"),
             pl.len().alias(f"n_rounds_format_{prefix}"),
+        )
+    )
+
+
+def _generic_class_mae(rounds: pl.DataFrame, data_class: str, prefix: str) -> pl.DataFrame:
+    """Public-trace MAE on one kind of trace, so groups can be compared on the same data."""
+    return (
+        rounds.filter((pl.col("source") == "generic") & (pl.col("data_class") == data_class))
+        .group_by("study_id")
+        .agg(
+            pl.col("mae").mean().alias(f"mae_{prefix}"),
+            pl.len().alias(f"n_rounds_{prefix}"),
         )
     )
 
@@ -143,6 +157,10 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
         mae_a = _format_mae(rounds, FORMAT_GENERIC, "a")
         mae_b = _format_mae(rounds, FORMAT_OWN, "b")
         mae_c = _format_mae(rounds, FORMAT_MIXED, "c")
+        generic_diabetic = _generic_class_mae(rounds, DATA_CLASS_DIABETIC, "generic_diabetic_data")
+        generic_nondiabetic = _generic_class_mae(
+            rounds, DATA_CLASS_NONDIABETIC, "generic_nondiabetic_data"
+        )
         same_trait = _trait_side_mae(rounds, opposite=False, prefix="same_trait")
         opposite_trait = _trait_side_mae(rounds, opposite=True, prefix="opposite_trait")
         challenge_history = _challenge_history(runs)
@@ -156,6 +174,8 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
             .join(mae_a, on="study_id", how="left")
             .join(mae_b, on="study_id", how="left")
             .join(mae_c, on="study_id", how="left")
+            .join(generic_diabetic, on="study_id", how="left")
+            .join(generic_nondiabetic, on="study_id", how="left")
             .join(same_trait, on="study_id", how="left")
             .join(opposite_trait, on="study_id", how="left")
             .join(challenge_history, on="study_id", how="left")
@@ -171,6 +191,8 @@ def build_participant_table(runs: pl.DataFrame) -> pl.DataFrame:
                 pl.col("n_rounds_format_c").fill_null(0).cast(pl.Int64),
                 pl.col("n_rounds_same_trait").fill_null(0).cast(pl.Int64),
                 pl.col("n_rounds_opposite_trait").fill_null(0).cast(pl.Int64),
+                pl.col("n_rounds_generic_diabetic_data").fill_null(0).cast(pl.Int64),
+                pl.col("n_rounds_generic_nondiabetic_data").fill_null(0).cast(pl.Int64),
                 pl.col("played_challenge_unknown").fill_null(False),
                 pl.col("played_opposite_trait").fill_null(False),
                 pl.coalesce([pl.col("mae_generic"), pl.col("mae_overall")]).alias("mae_primary"),

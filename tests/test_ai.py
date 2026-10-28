@@ -133,7 +133,7 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert "personDev-A" in html
     assert "aiDevHost" in html
     assert "pointRadius: 1" in html
-    assert "All-round deviations" in html
+    assert "How errors grow over the hidden hour" in html
     assert "chartLightbox" in html
     assert 'id="aiMix"' in html
     assert "aiMixMiddle" in html

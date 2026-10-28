@@ -152,7 +152,7 @@ def ensure_citras_bundle(
     if found is not None:
         return found
     _load_hf_token_from_dotenv()
-    if not any(os.environ.get(key) for key in _HF_TOKEN_KEYS):
+    if not _has_hf_token():
         return None
     chosen.cache_dir.mkdir(parents=True, exist_ok=True)
     from huggingface_hub import snapshot_download
@@ -163,6 +163,15 @@ def ensure_citras_bundle(
         allow_patterns=["model.onnx", "onnx_meta.json", "tuning_meta.json", "ONNX.md"],
     )
     return find_citras_bundle(chosen.cache_dir, spec=chosen)
+
+
+def _has_hf_token() -> bool:
+    """An env/.env token, or a saved `hf auth login` on this machine."""
+    if any(os.environ.get(key) for key in _HF_TOKEN_KEYS):
+        return True
+    from huggingface_hub import get_token
+
+    return bool(get_token())
 
 
 def _load_hf_token_from_dotenv() -> None:

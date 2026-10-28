@@ -43,23 +43,26 @@ def test_full_pipeline_on_synthetic(tmp_path: Path) -> None:
     explorer = out / "reports" / "explorer.html"
     assert explorer.exists()
     explorer_html = explorer.read_text(encoding="utf-8")
-    assert "study explorer" in explorer_html.lower()
+    assert "study dashboard" in explorer_html.lower()
     assert "chart.js" in explorer_html.lower()
     assert 'data-tab="people"' in explorer_html
     assert "Actual CGM" in explorer_html
-    assert "per-person traces" in explorer_html.lower()
+    assert "one player at a time" in explorer_html.lower()
     assert "nextPerson" in explorer_html
     assert "traceGrid" in explorer_html
     assert "#9333ea" in explorer_html
     assert "#2563eb" in explorer_html
     assert "borderDash" in explorer_html
-    assert "Primary hypotheses" in explorer_html
+    assert "Main questions" in explorer_html
+    assert "designCard" in explorer_html
+    assert "h1Matched" in explorer_html
+    assert "powerCurve" in explorer_html
     assert "aiTaskMae" in explorer_html
     assert "AI H1–H5" not in explorer_html
     assert "personDev-A" in explorer_html
     assert "aiDevHost" in explorer_html
     assert "pointRadius: 1" in explorer_html
-    assert "All-round deviations" in explorer_html
+    assert "How errors grow over the hidden hour" in explorer_html
     assert "chartLightbox" in explorer_html
     assert 'id="aiMix"' in explorer_html
     assert "aiMixSnaps" in explorer_html
@@ -116,9 +119,9 @@ def test_full_pipeline_on_synthetic(tmp_path: Path) -> None:
     assert "diabetes_duration_months" in json_text
     assert "Months with diabetes" in explorer_html or "diabetes_duration_months" in explorer_html
     assert "pie-box" in explorer_html
-    assert "aspectRatio: 1" in explorer_html
+    assert "aspect-ratio: 1 / 1" in explorer_html
     assert "afterBuildTicks" in explorer_html
-    assert "layeredCategoryScales(\"PwD\"" in explorer_html or 'layeredCategoryScales("PwD"' in explorer_html
+    assert 'layeredCategoryScales("With diabetes"' in explorer_html
     assert "months" in report.lower()
 
 
