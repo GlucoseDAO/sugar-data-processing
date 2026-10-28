@@ -21,6 +21,7 @@ from sugar_data_processing.config import (
     MAX_PLAUSIBLE_DIABETES_YEARS,
 )
 from sugar_data_processing.gathering.participants import opposite_trait_summary
+from sugar_data_processing.gathering.sources import classify_data_class
 from sugar_data_processing.output.narration import (
     explain_edition_and_ai_path,
     explain_hypothesis_result,
@@ -33,6 +34,7 @@ from sugar_data_processing.statistics.catalog import HYPOTHESES
 from sugar_data_processing.statistics.progress import study_progress
 
 LOGO_PATH: Path = Path(__file__).parent / "assets" / "glucosedao_logo.jpeg"
+ICON_PATH: Path = Path(__file__).parent / "assets" / "sugar_sugar_icon.svg"
 
 
 def write_explorer_html(
@@ -75,8 +77,10 @@ def write_explorer_html(
             h6=h6,
             milestone=milestone,
         )
-        html_text = _HTML_TEMPLATE.replace("__LOGO_URI__", _logo_data_uri()).replace(
-            "__PAYLOAD__", json.dumps(payload, default=_json_default)
+        html_text = (
+            _HTML_TEMPLATE.replace("__LOGO_URI__", _logo_data_uri())
+            .replace("__ICON_URI__", _icon_data_uri())
+            .replace("__PAYLOAD__", json.dumps(payload, default=_json_default))
         )
         if milestone:
             html_text = _FULL_ONLY.sub("", html_text)
@@ -92,6 +96,12 @@ def _logo_data_uri() -> str:
     """Inline the GlucoseDAO logo so the published page stays a single file."""
     encoded = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
     return f"data:image/jpeg;base64,{encoded}"
+
+
+def _icon_data_uri() -> str:
+    """Inline the Sugar-Sugar mark used for the brand and the favicon."""
+    encoded = base64.b64encode(ICON_PATH.read_bytes()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def _without_leading_heading(fragment: str) -> str:
@@ -261,7 +271,10 @@ def _explorer_payload(
     format_counts = (
         runs.group_by("format").len().sort("format").to_dicts() if runs.height else []
     )
-    compact_traces = [] if milestone else [_compact_trace(item) for item in traces]
+    diabetic_by_id = {
+        str(row["study_id"]): row.get("diabetic") for row in participants.iter_rows(named=True)
+    }
+    compact_traces = [] if milestone else [_compact_trace(item, diabetic_by_id) for item in traces]
     return {
         "edition": "milestone" if milestone else edition,
         "milestone": milestone,
@@ -309,8 +322,14 @@ def _explorer_payload(
     }
 
 
-def _compact_trace(item: dict[str, Any]) -> dict[str, Any]:
+def _compact_trace(item: dict[str, Any], diabetic_by_id: dict[str, Any]) -> dict[str, Any]:
     study_id = str(item.get("study_id") or "")
+    source = str(item.get("source") or "")
+    data_class = classify_data_class(
+        str(item.get("data_source_name") or ""),
+        is_example=(source == "generic") if source else None,
+        player_diabetic=diabetic_by_id.get(study_id),
+    )
     return {
         "study_id": study_id,
         "study_id_short": study_id[:12],
@@ -324,6 +343,7 @@ def _compact_trace(item: dict[str, Any]) -> dict[str, Any]:
         "human": list(item.get("human") or []),
         "models": item.get("models") or {},
         "visible_end": int(item.get("visible_end") or 0),
+        "data_class": data_class or "",
     }
 
 
@@ -332,8 +352,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sugar-Sugar study dashboard · GlucoseDAO</title>
-  <link rel="icon" type="image/jpeg" href="__LOGO_URI__" />
+  <title>Sugar-Sugar study dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="__ICON_URI__" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
@@ -384,12 +404,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       white-space: nowrap;
     }
     .brand img {
-      width: 36px;
-      height: 36px;
-      border-radius: 9px;
-      background: #fff;
-      padding: 2px;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
     }
+    .brand span { font-size: 1.2rem; letter-spacing: 0.01em; }
     .tabs { display: flex; flex-wrap: wrap; align-items: stretch; flex: 1; }
     .tabs button {
       border: 0;
@@ -403,17 +423,23 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     }
     .tabs button:hover { background: rgba(0, 0, 0, 0.06); }
     .tabs button.active { background: rgba(0, 0, 0, 0.14); color: #fff; }
-    .play {
-      align-self: center;
+    .play, .cta {
       color: #fff;
-      font-weight: 700;
+      font-weight: 900;
       text-decoration: none;
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      border-radius: 8px;
-      padding: 6px 12px;
       white-space: nowrap;
+      background: #f97316;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
     }
-    .play:hover { background: rgba(255, 255, 255, 0.12); }
+    .play { align-self: center; padding: 8px 16px; }
+    .play:hover, .cta:hover { background: #ea580c; }
+    .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 16px 0 4px; }
+    .cta { display: inline-block; padding: 12px 22px; font-size: 1.1rem; }
+    .cta-row span { color: var(--muted); max-width: 46ch; }
+    .byline { margin: 10px 0 0 !important; color: var(--muted); font-size: 0.85rem !important; }
+    .byline a { color: var(--muted); font-weight: 700; text-decoration: none; }
+    .byline img { width: 16px; height: 16px; border-radius: 4px; margin: 0 4px 0 2px; vertical-align: -3px; }
     .wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
     .hero { padding: 28px 0 6px; }
     .eyebrow {
@@ -501,12 +527,23 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       font-weight: 900;
       letter-spacing: 0.02em;
     }
-    .v-supported { border-left-color: #16a34a; } .v-supported .verdict { background: #dcfce7; color: #166534; }
-    .v-opposite { border-left-color: #d97706; } .v-opposite .verdict { background: #fef3c7; color: #92400e; }
-    .v-significant { border-left-color: #2185d0; } .v-significant .verdict { background: #dbeafe; color: #1e40af; }
-    .v-not_yet { border-left-color: #94a3b8; } .v-not_yet .verdict { background: #f1f5f9; color: #475569; }
-    .v-too_few { border-left-color: #cbd5e1; border-left-style: dashed; } .v-too_few .verdict { background: #f8fafc; color: #64748b; border: 1px dashed #cbd5e1; }
-    .v-context { border-left-color: #0891b2; } .v-context .verdict { background: #e0f2fe; color: #075985; }
+    .t-good { border-left-color: #16a34a; background: #f0fdf4; }
+    .t-good .verdict { background: #dcfce7; color: #166534; }
+    .t-warn { border-left-color: #eab308; background: #fefce8; }
+    .t-warn .verdict { background: #fef9c3; color: #854d0e; }
+    .t-bad { border-left-color: #dc2626; background: #fef2f2; }
+    .t-bad .verdict { background: #fee2e2; color: #991b1b; }
+    .tone-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0 0 14px; font-size: 0.9rem; color: var(--text); }
+    .tone-legend span::before {
+      content: "";
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 7px;
+      border-radius: 3px;
+      vertical-align: -1px;
+      background: var(--tone);
+    }
     .cell { margin: 12px 0 16px; }
     .cell-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 0.95rem; }
     .cell-head strong { color: var(--ink); }
@@ -549,7 +586,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     table.design td b { display: block; color: var(--ink); font-size: 1.9rem; font-weight: 900; line-height: 1.1; }
     table.design td small { display: block; color: var(--muted); font-size: 0.8rem; }
     table.design td.default { background: #eff6ff; border-color: #bfdbfe; }
-    table.design td.sparse { background: #fef2f2; border-color: #fecaca; }
+    table.design td.sparse { background: #fefce8; border-color: #fde68a; }
     table.design .tag { display: inline-block; margin-top: 4px; color: var(--blue-deep); font-size: 0.72rem; font-weight: 900; }
     .details-stack details {
       background: var(--card);
@@ -602,7 +639,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     @media (max-width: 900px) {
       .pair, .pair-flat, .pair-flat.even { grid-template-columns: 1fr; }
       .hero h1 { font-size: 2rem; }
-      .topbar { flex-wrap: wrap; }
+      .topbar { position: static; flex-wrap: wrap; padding: 0 12px; }
+      .play { order: 2; margin-left: auto; padding: 6px 12px; }
+      .tabs { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; }
+      .tabs button { padding: 10px 12px; font-size: 0.95rem; white-space: nowrap; }
     }
     .pair h3 { margin: 0 0 8px; font-size: 1.1rem; }
     .pair > .chart-box, .pair > .pie-box { position: sticky; top: 72px; }
@@ -612,6 +652,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     .howto li { margin-bottom: 4px; }
     .chart-box { position: relative; width: 100%; height: 380px; }
     .chart-box.short { height: 300px; }
+    .chart-box.tall { height: 460px; }
     canvas { display: block; }
     .trace-grid {
       display: grid;
@@ -829,9 +870,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 </head>
 <body>
   <nav class="topbar">
-    <a class="brand" href="https://glucosedao.org" target="_blank" rel="noopener noreferrer">
-      <img src="__LOGO_URI__" alt="GlucoseDAO logo" />
-      <span>GlucoseDAO</span>
+    <a class="brand" href="https://sugar-sugar.study" target="_blank" rel="noopener noreferrer" title="Play Sugar-Sugar">
+      <img src="__ICON_URI__" alt="" />
+      <span>Sugar-Sugar</span>
     </a>
     <div class="tabs" id="tabs">
       <button type="button" data-tab="overview" class="active">Overview</button>
@@ -841,13 +882,18 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       <button type="button" data-tab="people">Individual players</button>
       <!-- END_FULL_ONLY -->
     </div>
-    <a class="play" href="https://sugar-sugar.study" target="_blank" rel="noopener noreferrer">Play Sugar-Sugar ↗</a>
+    <a class="play" href="https://sugar-sugar.study" target="_blank" rel="noopener noreferrer">▶ Play the game</a>
   </nav>
   <div class="wrap">
   <header class="hero">
     <div class="eyebrow" id="editionBadge">Live study dashboard</div>
     <h1 id="pageTitle">Sugar-Sugar study</h1>
     <p id="headerLead">Can people predict where glucose goes in the next hour? Players see three hours of real CGM data and draw their forecast. This page shows how the study is going, what we have learned and how many more players we need.</p>
+    <div class="cta-row">
+      <a class="cta" href="https://sugar-sugar.study" target="_blank" rel="noopener noreferrer">▶ Play Sugar-Sugar</a>
+      <span>Predict the next hour in 15–20 minutes. Every new player brings the study closer to an answer.</span>
+    </div>
+    <p class="byline">A research project by <a href="https://glucosedao.org" target="_blank" rel="noopener noreferrer"><img src="__LOGO_URI__" alt="" />GlucoseDAO</a></p>
   </header>
   <main>
     <div class="stats" id="stats" hidden></div>
@@ -880,12 +926,13 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       <section>
         <h2>What we have learned so far</h2>
         <p class="lead">One card per study question. The error is how far a player's drawn forecast was from the real CGM reading, averaged over the next hour, in mg/dL. <b>Lower is better.</b></p>
+        <div class="tone-legend"><span style="--tone:#16a34a">Supported or useful finding</span><span style="--tone:#eab308">Not enough data yet</span><span style="--tone:#dc2626">Against our assumptions</span></div>
         <div class="findings" id="findings"></div>
       </section>
 
       <section class="card" id="designCard" hidden>
         <h2>Design check: who saw which glucose traces?</h2>
-        <p class="lead">By default the game shows players with diabetes diabetic traces and everyone else non-diabetic traces. Only players who choose "challenge the unknown" also see the other kind. A fair comparison needs both groups on the <b>same</b> kind of trace, so the off-default cells (red) matter most.</p>
+        <p class="lead">By default the game shows players with diabetes diabetic traces and everyone else non-diabetic traces. Only players who choose "challenge the unknown" also see the other kind. A fair comparison needs both groups on the <b>same</b> kind of trace, so the off-default cells (yellow) matter most.</p>
         <div class="pair-flat even">
           <div class="table-scroll"><table class="design" id="designTable"></table></div>
           <div id="designVerdict"></div>
@@ -929,7 +976,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <h2>People vs algorithms on the same windows</h2>
         <div class="pair-flat">
           <div>
-            <p class="lead">Algorithms were given exactly the three hours of data the player saw, then scored on the same hidden hour. Bars show average error; <b>shorter is better</b>.</p>
+            <p class="lead">Algorithms were given exactly the three hours of data the player saw, then scored on the same hidden hour. Bars show average error, split into <b style="color:#E45756">diabetic</b> and <b style="color:#4C78A8">non-diabetic</b> traces because diabetic traces are harder for everyone; <b>shorter is better</b>.</p>
             <ul class="howto">
               <li><b>Persistence</b>: assumes glucose stays at its last value.</li>
               <li><b>Linear trend</b>: extends the recent slope.</li>
@@ -937,7 +984,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
             </ul>
             <p class="note" id="aiGlanceNote"></p>
           </div>
-          <div class="chart-box short"><canvas id="aiGlance" data-title="People vs algorithms"></canvas></div>
+          <div class="chart-box tall"><canvas id="aiGlance" data-title="People vs algorithms by trace type"></canvas></div>
         </div>
       </section>
       <!-- END_FULL_ONLY -->
@@ -995,7 +1042,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       </section>
       <section>
         <h2>2. Main questions: diabetes and CGM use (H1, H2)</h2>
-        <p class="lead">Blue dots are errors on public traces (the main measure), green dots on the player's own data. The dashes mark medians.</p>
+        <p class="lead">Blue dots are errors on public traces (the main measure), green dots on the player's own data. The dashes mark medians. Each question opens with a plain-language verdict card.</p>
+        <div class="tone-legend"><span style="--tone:#16a34a">Supported or useful finding</span><span style="--tone:#eab308">Not enough data yet</span><span style="--tone:#dc2626">Against our assumptions</span></div>
         <div class="pair">
           <div class="prose" id="h1Text"></div>
           <div class="chart-box"><canvas id="h1" data-title="H1: diabetes vs no diabetes"></canvas></div>
@@ -1293,7 +1341,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
     }
     function findingCard(f) {
-      return `<article class="finding v-${esc(f.verdict)}">
+      return `<article class="finding t-${esc(f.tone || "warn")}">
           <div class="q"><b>${esc(f.code)}</b>${esc(f.question)}</div>
           <span class="verdict">${esc(f.verdict_label)}</span>
           <div class="headline">${esc(f.headline)}</div>
@@ -1347,10 +1395,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         ctx.fillStyle = "#0f172a";
         ctx.font = "700 13px Lato, system-ui, sans-serif";
         ctx.textBaseline = "middle";
-        chart.getDatasetMeta(0).data.forEach((bar, i) => {
-          const value = chart.data.datasets[0].data[i];
-          if (value === null || value === undefined) return;
-          ctx.fillText(Number(value).toFixed(1) + " mg/dL", bar.x + 8, bar.y);
+        chart.data.datasets.forEach((dataset, d) => {
+          const meta = chart.getDatasetMeta(d);
+          if (meta.hidden) return;
+          meta.data.forEach((bar, i) => {
+            const value = dataset.data[i];
+            if (value === null || value === undefined) return;
+            ctx.fillText(Number(value).toFixed(1), bar.x + 6, bar.y);
+          });
         });
         ctx.restore();
       },
@@ -1443,7 +1495,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const share = d.n_eligible ? Math.round(100 * d.n_eligible_off_default / d.n_eligible) : 0;
       document.getElementById("designVerdict").innerHTML = `
         <p><b>${d.n_saw_both}</b> of ${d.n_players} players saw both kinds of trace${d.n_saw_both_challenge === null ? "" : `, and ${d.n_saw_both_challenge} of them had chosen "challenge the unknown"`}.</p>
-        <p>${share < 50 ? "Only " : ""}<b>${d.n_eligible_off_default}</b> of ${d.n_eligible} eligible players (${share}%) have ${d.min_rounds}+ rounds on the kind of trace that is not their default. Everyone else can only be compared on "their own" kind of trace, where the two groups never meet.</p>
+        <p>"Challenge the unknown" gives a player 12 rounds, 6 of each kind, so everyone who chooses it and finishes counts for the fair comparison. The off-default cells are small only because few players choose it: ${share < 50 ? "only " : ""}<b>${d.n_eligible_off_default}</b> of ${d.n_eligible} eligible players (${share}%). Everyone else can only be compared on "their own" kind of trace, where the two groups never meet.</p>
         <div class="callout"><b>Suggested change (game interface, not the protocol):</b> give every player a balanced mix, for example alternating diabetic and non-diabetic traces and starting with a random kind. Each player then shows how much harder diabetic traces are for them, and every eligible player counts for the fair comparison instead of ${share}% today.</div>`;
     }
 
@@ -1574,31 +1626,71 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const comps = ((DATA.h6 || {}).comparisons || []).filter((c) => num(c.model_mean_mae) !== null);
       if (!card || !comps.length) return;
       card.hidden = false;
-      const rows = [{ label: "People", value: num(comps[0].human_mean_mae), color: "#2563eb" }].concat(
-        comps
-          .map((c) => ({ label: modelLabel(c.model_name), value: num(c.model_mean_mae), color: ((DATA.line_styles || {})[c.model_name] || {}).color || "#9333ea" }))
-          .sort((a, b) => a.value - b.value)
-      );
       const trained = comps.some((c) => ["glumind", "sugar_one", "citras", "citras_w38_2", "kronlstm"].includes(c.model_name));
-      const players = Math.max(...comps.map((c) => Number(c.n) || 0));
+      const models = availableModels();
+      const classes = [
+        { key: "diabetic", label: "Diabetic traces", color: COLORS.diabetic_cgm },
+        { key: "nondiabetic", label: "Non-diabetic traces", color: COLORS.nondiabetic_cgm },
+      ];
+      const roundMae = (trace, values) => {
+        const actual = hiddenHour(trace.actual, trace.visible_end);
+        const predicted = hiddenHour(values, trace.visible_end);
+        let sum = 0;
+        let n = 0;
+        actual.forEach((a, i) => {
+          const p = num((predicted || [])[i]);
+          if (num(a) !== null && p !== null) { sum += Math.abs(p - a); n += 1; }
+        });
+        return n ? sum / n : null;
+      };
+      // Only rounds every forecaster scored, so each bar covers the same windows.
+      const summary = classes.map((cls) => {
+        const rounds = (DATA.traces || []).filter((t) => t.data_class === cls.key
+          && roundMae(t, t.human) !== null && models.every((m) => roundMae(t, (t.models || {})[m]) !== null));
+        const avg = (fn) => rounds.length ? rounds.reduce((acc, t) => acc + fn(t), 0) / rounds.length : null;
+        return {
+          ...cls,
+          rounds: rounds.length,
+          players: new Set(rounds.map((t) => t.study_id)).size,
+          values: Object.fromEntries([["People", avg((t) => roundMae(t, t.human))]].concat(
+            models.map((m) => [modelLabel(m), avg((t) => roundMae(t, t.models[m]))])
+          )),
+        };
+      });
+      const labels = ["People"].concat(models.map(modelLabel));
+      const overall = (label) => {
+        const vals = summary.map((s) => s.values[label]).filter((v) => v !== null);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : Infinity;
+      };
+      const ordered = ["People"].concat(labels.slice(1).sort((a, b) => overall(a) - overall(b)));
       document.getElementById("aiGlanceNote").textContent =
-        `Compared on the same windows for ${players} players.` +
+        summary.map((s) => `${s.label}: ${s.rounds} rounds from ${s.players} players`).join(" · ") +
+        ". Only rounds that every forecaster scored." +
         (trained ? "" : " Only the simple baselines were scored in this build; the trained models are not included yet.");
-      const top = Math.max(...rows.map((r) => r.value)) * 1.3;
+      const values = summary.flatMap((s) => Object.values(s.values)).filter((v) => v !== null);
+      const top = values.length ? Math.max(...values) * 1.2 : 30;
       upsertChart("aiGlance", "bar", {
-        labels: rows.map((r) => r.label),
-        datasets: [{ label: "Average error (mg/dL)", data: rows.map((r) => r.value), backgroundColor: rows.map((r) => r.color), borderRadius: 6, maxBarThickness: 34 }],
+        labels: ordered,
+        datasets: summary.map((s) => ({
+          label: `${s.label} (${s.rounds} rounds)`,
+          data: ordered.map((label) => s.values[label]),
+          backgroundColor: hexAlpha(s.color, 0.85),
+          borderRadius: 5,
+          maxBarThickness: 18,
+        })),
       }, {
         indexAxis: "y",
         plugins: {
-          legend: { display: false },
+          legend: { position: "bottom" },
           barValues: { enabled: true },
-          tooltip: { callbacks: { label: (ctx) => `${Number(ctx.parsed.x).toFixed(1)} mg/dL average error` } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.x).toFixed(1)} mg/dL` } },
         },
         scales: {
-          x: { beginAtZero: true, max: Math.ceil(top / 5) * 5, title: { display: true, text: "Average error over the hidden hour (mg/dL) · shorter is better" } },
+          x: { beginAtZero: true, max: Math.ceil(top / 5) * 5, title: { display: true, text: "Average error per round over the hidden hour (mg/dL) · shorter is better" } },
           y: { grid: { display: false }, ticks: { font: { size: 14, weight: "700" } } },
         },
+      });
+    },
       });
     }
 

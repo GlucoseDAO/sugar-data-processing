@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Sugar-Sugar mark: three hours of CGM (blue), then the player's drawn forecast (orange). -->
+  <rect width="48" height="48" rx="11" fill="#ffffff"/>
+  <line x1="28" y1="9" x2="28" y2="39" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="2.5 2.5"/>
+  <path d="M7 31 C10.5 31 12 22 16 21.5 S21.5 30 24.5 29.5 S27 27 28 26.5"
+        fill="none" stroke="#1565c0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 26.5 C31.5 24.5 34 16.5 41 15.5"
+        fill="none" stroke="#f97316" stroke-width="4" stroke-linecap="round" stroke-dasharray="4.5 4"/>
+  <circle cx="28" cy="26.5" r="3" fill="#1565c0" stroke="#ffffff" stroke-width="1.5"/>
+</svg>

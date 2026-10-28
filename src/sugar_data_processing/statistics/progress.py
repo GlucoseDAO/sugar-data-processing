@@ -83,11 +83,23 @@ MIN_REPLAYED_PLAYERS: int = 30
 
 VERDICT_LABELS: dict[str, str] = {
     "supported": "Supported",
-    "opposite": "Significant, but opposite to expected",
-    "significant": "Clear difference",
-    "not_yet": "No clear answer yet",
+    "exploratory": "Promising, exploratory",
+    "opposite": "Against our assumptions",
+    "significant": "Useful finding",
+    "not_yet": "Not enough data yet",
     "too_few": "Too few people so far",
-    "context": "Context",
+    "context": "Useful context",
+}
+# Dashboard colours: green = supported or useful, yellow = not enough data,
+# red = a clear result against the study's assumptions.
+VERDICT_TONES: dict[str, str] = {
+    "supported": "good",
+    "exploratory": "good",
+    "significant": "good",
+    "context": "good",
+    "not_yet": "warn",
+    "too_few": "warn",
+    "opposite": "bad",
 }
 
 
@@ -479,6 +491,7 @@ def _card(code: str, question: str, verdict: str, headline: str, detail: str) ->
         "question": question,
         "verdict": verdict,
         "verdict_label": VERDICT_LABELS[verdict],
+        "tone": VERDICT_TONES[verdict],
         "headline": headline,
         "detail": detail,
     }
@@ -579,29 +592,48 @@ def _findings(
             else f"CGM users {_mg(h2['mean_a'])} vs non-users {_mg(h2['mean_b'])}."
         )
         cards.append(_card("H2", "Do CGM users predict better?", verdict, headline, detail))
+        for row in matched.get("cgm_by_class", []):
+            if not row.get("significant"):
+                continue
+            fewer = row["mean_a"] < row["mean_b"]
+            cards.append(_card(
+                "H2 · same traces", "Do CGM users predict better on the same kind of trace?",
+                "exploratory" if fewer else "opposite",
+                f"On {row['label']}, CGM users erred {'less' if fewer else 'more'}: "
+                f"{_mg(row['mean_a'])} vs {_mg(row['mean_b'])} for non-users.",
+                f"{row['n_a']} vs {row['n_b']} players with at least {matched['min_rounds']} such rounds, "
+                f"{_p(row['p_value'])} (threshold 0.025). Exploratory: this split was chosen after seeing "
+                "the data, so it needs confirming in new players.",
+            ))
 
-    h3, h4 = by_code["H3"], by_code["H4"]
-    experience = [row for row in (h3, h4) if row["n_now"] >= 3 and row["observed"] is not None]
-    if not experience:
-        cards.append(_card("H3–H4", "Does experience help?", "too_few",
-                           "Not enough people with known diabetes or CGM duration yet.", ""))
-    else:
-        verdicts = [_verdict(row["significant"], -1.0, row["observed"]) for row in experience]
-        verdict = next((v for v in verdicts if v in {"supported", "opposite"}), verdicts[0])
-        parts = [
-            f"{'diabetes' if row['code'] == 'H3' else 'CGM'} years: r = {row['observed']:+.2f}, "
-            f"{_p(row['p_value'])}, n = {row['n_now']}"
-            for row in experience
-        ]
-        headline = (
-            "No clear link between years of experience and accuracy."
-            if verdict == "not_yet"
-            else "Experience and accuracy are linked in at least one group."
+    experience = (
+        (by_code["H3"], "Do people with diabetes predict better the longer they have had it?", "years with diabetes"),
+        (by_code["H4"], "Do CGM users predict better the longer they have used one?", "years of CGM use"),
+    )
+    for row, question, what in experience:
+        if row["n_now"] < 3 or row["observed"] is None:
+            cards.append(_card(
+                row["code"], question, "too_few",
+                f"Not enough people with a known duration yet ({row['n_now']}).", "",
+            ))
+            continue
+        verdict = _verdict(row["significant"], -1.0, row["observed"])
+        r = row["observed"]
+        headline = {
+            "not_yet": f"No clear link between {what} and accuracy (r = {r:+.2f}).",
+            "supported": f"More {what} went with smaller errors (r = {r:+.2f}).",
+            "opposite": f"More {what} went with larger errors (r = {r:+.2f}), the opposite of what we expected.",
+        }[verdict]
+        detail = (
+            f"{row['n_now']} people, {_p(row['p_value'])} ({row['test_used'] or 'correlation'}). "
+            f"A reliable answer needs about {row['need_total']} people in this group."
         )
-        cards.append(_card(
-            "H3–H4", "Does experience help?", verdict, headline,
-            "; ".join(parts) + f". A reliable answer needs about {h3['need_total']} people per subgroup.",
-        ))
+        if verdict != "not_yet":
+            detail += (
+                " Fragile: far fewer people than planned, and secondary questions are not corrected "
+                "for multiple testing."
+            )
+        cards.append(_card(row["code"], question, verdict, headline, detail))
 
     h5 = by_code["H5"]
     if h5["p_value"] is None:
@@ -648,9 +680,19 @@ def _findings(
                 " Only the simple baselines were scored in this build; GlucoseDAO's trained models "
                 "(CITRAS-FM, GluMind, KronLSTM) are not in this comparison yet."
             )
+        # The study expects trained models to beat people: green when they do, red when
+        # people beat them. Without trained scores, a clear baseline result is still useful.
+        trained = [c for c in comparisons if c["model_name"] in TRAINED_MODELS]
+        if replayed < MIN_REPLAYED_PLAYERS:
+            verdict = "too_few"
+        elif any(c.get("significant") and c not in better for c in trained):
+            verdict = "opposite"
+        elif any(c.get("significant") and c in better for c in trained):
+            verdict = "supported"
+        else:
+            verdict = "significant" if significant else "not_yet"
         cards.append(_card(
-            "H6", "How do people compare with algorithms?",
-            "too_few" if replayed < MIN_REPLAYED_PLAYERS else "significant" if significant else "not_yet",
+            "H6", "How do people compare with algorithms?", verdict,
             headline[0].upper() + headline[1:],
             detail + " Persistence means 'glucose stays where it is'.",
         ))

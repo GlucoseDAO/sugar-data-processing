@@ -61,3 +61,22 @@ def test_h6_card_says_when_only_baselines_were_scored(tmp_path: Path) -> None:
     assert "Persistence predicted better than people" in card["headline"]
     assert "Only the simple baselines" in card["detail"]
     assert card["verdict"] == "significant"
+    assert card["tone"] == "good"
+
+
+def test_h6_is_green_when_trained_models_beat_people_and_red_otherwise(tmp_path: Path) -> None:
+    def card_for(model_mae: float) -> dict:
+        h6 = {"comparisons": [{"model_name": "kronlstm", "n": 40, "human_mean_mae": 21.0,
+                               "model_mean_mae": model_mae, "p_value": 0.001, "significant": True}]}
+        _, progress = _progress(tmp_path, h6=h6)
+        return next(f for f in progress["findings"] if f["code"] == "H6")
+
+    assert card_for(14.0)["tone"] == "good"
+    assert card_for(14.0)["verdict"] == "supported"
+    assert card_for(28.0)["tone"] == "bad"
+
+
+def test_every_finding_has_a_traffic_light_tone(tmp_path: Path) -> None:
+    _, progress = _progress(tmp_path)
+    assert progress["findings"]
+    assert {f["tone"] for f in progress["findings"]} <= {"good", "warn", "bad"}
