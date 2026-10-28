@@ -106,6 +106,12 @@ Both generated HTML pages also pass a Node.js JavaScript syntax check before
 publication. Set `SDP_NODE` to the Node executable when it is not on the service's
 PATH (OVH uses `/home/web/.nvm/versions/node/v22.23.1/bin/node`).
 
+Model forecasts are cached in the checkout's gitignored
+`data/processed/model_cache/forecasts.parquet`, outside the temporary build
+directory, so a rebuild scores only new or changed game windows. The first build
+after new model bundles scores everything. Add `SDP_SCORE_CACHE=off` to
+`update.env` (or delete the file) to force a full rescore.
+
 The defaults can be overridden with `SDP_REPO`, `SDP_DEPLOY_DIR`, `SDP_BRANCH`,
 `SDP_UV`, `SDP_INPUT_CSV`, `SDP_REQUIRED_MODELS`, and `SDP_NODE`. A change to the installed script or units must be installed again;
 pulling application commits does not replace the running deployment tooling.

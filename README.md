@@ -257,8 +257,15 @@ Resolution order for `analyze` without `--csv` / `--fixture`:
 | `output/reports/milestone.html` | Milestone page: human participants only (Overview + Human) |
 | `output/reports/analysis_report.json` | Machine-readable human + AI payload |
 | `data/processed/ai/prediction_points.csv` | Per-point sequences for post-factum model scoring |
+| `data/processed/model_cache/forecasts.parquet` | Trained-model forecasts kept between builds (see below) |
 | `output/figures/*.png` | Plots (also copied under `output/reports/figures/`) |
 | `data/processed/participants.csv` | Person-level analysis table |
+
+Scoring the trained models (CITRAS-FM, KronLSTM, GluMind) on every window takes
+minutes, so each build keeps their forecasts in `data/processed/model_cache/`. The
+next build scores only windows that are new or whose visible three hours changed;
+new model files or a change to a model's scoring code score every window again.
+Set `SDP_SCORE_CACHE=off` to rescore everything, or point it at another file.
 
 Export sequences only (no full report rewrite):
 

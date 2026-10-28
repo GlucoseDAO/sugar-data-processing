@@ -8,11 +8,14 @@ import numpy as np
 import polars as pl
 from eliot import start_action
 
-from sugar_data_processing.ai.citras import score_all_citras_windows
+from sugar_data_processing.ai import citras, kronlstm
+from sugar_data_processing.ai.cache import ForecastCache, Forecasts, bundle_fingerprint, files_fingerprint
+from sugar_data_processing.ai.citras import ensure_citras_bundle, score_citras_windows
 from sugar_data_processing.ai.convert import pad_context, write_ml_ready_csv
-from sugar_data_processing.ai.kronlstm import KRONLSTM_MODEL_NAME, score_kronlstm_windows
+from sugar_data_processing.ai.kronlstm import KRONLSTM_MODEL_NAME, ensure_kronlstm_bundle, score_kronlstm_windows
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
+    CITRAS_MODELS,
     EVALUATION_MODE_POST_FACTUM,
     FORECAST_HORIZON_POINTS,
     PRIMARY_MODEL_NAME,
@@ -32,6 +35,7 @@ def score_windows(
     *,
     forecasting_root: Path | None = None,
     ml_ready_path: Path | str | None = None,
+    cache_path: Path | None = None,
 ) -> pl.DataFrame:
     """Return ingest-ready predictions for every window and every available model.
 
@@ -41,14 +45,19 @@ def score_windows(
     ``citras`` / ``citras_w38_2`` are added when the matching dual-mode ONNX
     bundle is on disk or downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed
     R.80, two ONNX graphs) is added on the same terms.
+
+    With ``cache_path``, trained-model forecasts of windows scored before with the
+    same model files are read back instead of recomputed.
     """
     with start_action(action_type="ai.score_windows", n_windows=len(windows)) as action:
         if ml_ready_path is not None:
             write_ml_ready_csv(windows, ml_ready_path)
         rows: list[dict[str, object]] = []
-        deep = _score_glumind_batch(windows, forecasting_root)
-        citras_by_model = score_all_citras_windows(windows)
-        kronlstm = score_kronlstm_windows(windows)
+        cache = ForecastCache(cache_path)
+        deep = _score_glumind_batch(windows, forecasting_root, cache)
+        citras_by_model = _score_citras(windows, cache)
+        kronlstm_preds = _score_kronlstm(windows, cache)
+        cache.save()
         for window in windows:
             preds = {
                 MODEL_PERSISTENCE: _persistence(window.context_mgdl),
@@ -60,8 +69,8 @@ def score_windows(
             for model_name, by_key in citras_by_model.items():
                 if key in by_key:
                     preds[model_name] = by_key[key]
-            if key in kronlstm:
-                preds[MODEL_KRONLSTM] = kronlstm[key]
+            if key in kronlstm_preds:
+                preds[MODEL_KRONLSTM] = kronlstm_preds[key]
             for model_name, values in preds.items():
                 for index, value in enumerate(values):
                     rows.append(
@@ -89,6 +98,8 @@ def score_windows(
             message_type="info",
             n_rows=frame.height,
             models=sorted(frame["model_name"].unique().to_list()) if frame.height else [],
+            reused=cache.hits,
+            scored=cache.misses,
         )
         return frame
 
@@ -108,10 +119,41 @@ def _linear(context: list[float], tail: int = 6) -> list[float]:
     return [float(intercept + slope * (start + i)) for i in range(FORECAST_HORIZON_POINTS)]
 
 
+def _score_citras(windows: list[PlayedWindow], cache: ForecastCache) -> dict[str, Forecasts]:
+    """Every registered CITRAS variant whose bundle is on disk or downloadable."""
+    scored: dict[str, Forecasts] = {}
+    for spec in CITRAS_MODELS:
+        folder = ensure_citras_bundle(spec=spec) if windows else None
+        if folder is None:
+            continue
+        preds = cache.score(
+            spec.name,
+            bundle_fingerprint(folder, Path(citras.__file__)),
+            windows,
+            lambda missing, spec=spec, folder=folder: score_citras_windows(missing, spec=spec, bundle_dir=folder),
+        )
+        if preds:
+            scored[spec.name] = preds
+    return scored
+
+
+def _score_kronlstm(windows: list[PlayedWindow], cache: ForecastCache) -> Forecasts:
+    folder = ensure_kronlstm_bundle() if windows else None
+    if folder is None:
+        return {}
+    return cache.score(
+        MODEL_KRONLSTM,
+        bundle_fingerprint(folder, Path(kronlstm.__file__)),
+        windows,
+        lambda missing: score_kronlstm_windows(missing, bundle_dir=folder),
+    )
+
+
 def _score_glumind_batch(
     windows: list[PlayedWindow],
     forecasting_root: Path | None,
-) -> dict[tuple[str, str, int], list[float]]:
+    cache: ForecastCache,
+) -> Forecasts:
     """Score every window with sibling GluMind (``test_model``), or {} if unavailable."""
     if not windows:
         return {}
@@ -124,12 +166,18 @@ def _score_glumind_batch(
         weights = run_dir / "last_model.pt"
     if not weights.exists():
         return {}
-    try:
-        return _glumind_predict_all(windows, root, run_dir, weights)
-    except Exception as exc:  # noqa: BLE001 — optional sibling; never fail the pipeline
-        with start_action(action_type="ai.glumind_optional") as action:
-            action.log(message_type="warning", reason=str(exc))
-        return {}
+
+    def predict(missing: list[PlayedWindow]) -> Forecasts:
+        try:
+            return _glumind_predict_all(missing, root, run_dir, weights)
+        except Exception as exc:  # noqa: BLE001 — optional sibling; never fail the pipeline
+            with start_action(action_type="ai.glumind_optional") as action:
+                action.log(message_type="warning", reason=str(exc))
+            return {}
+
+    inputs = [weights, run_dir / "tuning_meta.json", run_dir / "config.json", run_dir / "scalers.json"]
+    sources = [root / "scripts" / "glumind" / "glumind_model.py", Path(__file__)]
+    return cache.score(MODEL_GLUMIND, files_fingerprint([*inputs, *sources]), windows, predict)
 
 
 def _glumind_predict_all(

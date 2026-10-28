@@ -9,6 +9,7 @@ from typing import Any
 import polars as pl
 from eliot import start_action
 
+from sugar_data_processing.ai.cache import score_cache_path
 from sugar_data_processing.ai.ingest import ModelComparison, ingest_model_predictions
 from sugar_data_processing.ai.overlay import h6_human_vs_models, overlay_model_mae
 from sugar_data_processing.ai.score import pick_primary_model, score_windows
@@ -55,6 +56,7 @@ def run_post_factum_scoring(
         predictions = score_windows(
             windows,
             ml_ready_path=dest / "ml_ready.csv",
+            cache_path=score_cache_path(),
         )
         predictions.write_csv(dest / "model_predictions.csv")
         if predictions.height:

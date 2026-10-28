@@ -226,3 +226,5 @@ DEFAULT_REPORTS_DIR: Path = DEFAULT_OUTPUT_DIR / "reports"
 DEFAULT_FIGURES_DIR: Path = DEFAULT_OUTPUT_DIR / "figures"
 DEFAULT_PROCESSED_DIR: Path = REPO_ROOT / "data" / "processed"
 DEFAULT_AI_DIR: Path = DEFAULT_PROCESSED_DIR / "ai"
+# Model forecasts kept between builds; outside the output tree, which server builds discard.
+DEFAULT_SCORE_CACHE: Path = DEFAULT_PROCESSED_DIR / "model_cache" / "forecasts.parquet"
