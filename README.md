@@ -28,7 +28,7 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 | **H3** | Diabetes duration (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H4** | CGM experience (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
-| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / GluMind (`torch` + sibling `test_model`) |
+| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / GluMind (`torch` + a glucose-forecasting checkout with `test_model`, named by `GLUCOSE_FORECASTING_DIR` or found beside this repository) |
 
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.

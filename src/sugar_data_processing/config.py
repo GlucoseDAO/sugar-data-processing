@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -118,7 +119,11 @@ DEFAULT_SUGAR_SUGAR_ROOT: Path = REPO_ROOT.parent / "sugar-sugar"
 DEFAULT_FORECASTING_ROOT: Path = (
     REPO_ROOT.parent.parent / "glucose-forecasting" / "glucose-forecasting"
 )
+# The glucose-forecasting checkout that holds GluMind (scripts/glumind and test_model) differs per
+# machine, so this variable names it; the locations below are only fallbacks for common layouts.
+FORECASTING_ROOT_ENV: str = "GLUCOSE_FORECASTING_DIR"
 FORECASTING_ROOT_CANDIDATES: tuple[Path, ...] = (
+    REPO_ROOT.parent / "glucose-forecasting",
     DEFAULT_FORECASTING_ROOT,
     REPO_ROOT.parent.parent / "g-forecasting2" / "glucose-forecasting",
     REPO_ROOT.parent.parent / "glucose-forecasting",
@@ -159,10 +164,14 @@ CITRAS_MODELS: tuple[CitrasModelSpec, ...] = (
 
 
 def find_forecasting_root(explicit: Path | None = None) -> Path | None:
-    """First sibling checkout that contains the GluMind sources."""
+    """First checkout that contains the GluMind sources: ``explicit``, then ``$GLUCOSE_FORECASTING_DIR``,
+    then the sibling locations in :data:`FORECASTING_ROOT_CANDIDATES`."""
     ordered: list[Path] = []
     if explicit is not None:
         ordered.append(Path(explicit))
+    configured = os.environ.get(FORECASTING_ROOT_ENV)
+    if configured:
+        ordered.append(Path(configured).expanduser())
     ordered.extend(FORECASTING_ROOT_CANDIDATES)
     seen: set[Path] = set()
     for path in ordered:

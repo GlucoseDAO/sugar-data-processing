@@ -24,6 +24,7 @@ from sugar_data_processing.config import (
     CITRAS_MODELS,
     CITRAS_PAST_STEPS,
     CITRAS_SEQ_LEN,
+    FORECASTING_ROOT_ENV,
     find_citras_bundle,
     find_forecasting_root,
 )
@@ -258,10 +259,20 @@ def test_citras_scores_one_real_window() -> None:
         assert later != values
 
 
+def test_forecasting_root_reads_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    checkout = tmp_path / "anywhere" / "glucose-forecasting"
+    (checkout / "scripts" / "glumind").mkdir(parents=True)
+    (checkout / "scripts" / "glumind" / "glumind_model.py").write_text("")
+    monkeypatch.setenv(FORECASTING_ROOT_ENV, str(checkout))
+    assert find_forecasting_root() == checkout.resolve()
+    assert find_forecasting_root(tmp_path / "missing") == checkout.resolve()
+
+
 def test_glumind_scores_one_real_window() -> None:
     root = find_forecasting_root()
-    assert root is not None
-    assert (root / "test_model" / "best_model.pt").exists()
+    if root is None or not (root / "test_model" / "best_model.pt").exists():
+        pytest.skip(f"GluMind is not on this machine: set {FORECASTING_ROOT_ENV} to a glucose-forecasting "
+                    "checkout that has scripts/glumind and test_model/best_model.pt")
     scored = score_windows([_sample_window()], forecasting_root=root)
     names = set(scored["model_name"].to_list())
     assert {"persistence", "linear", MODEL_GLUMIND} <= names
