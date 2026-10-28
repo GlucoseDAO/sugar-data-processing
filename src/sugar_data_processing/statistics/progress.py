@@ -148,6 +148,10 @@ def study_progress(
             "linked_identities": linked_identities,
             "model_labels": MODEL_LABELS,
             "n_people": n_people,
+            # Starting a game saves a run even when no round is submitted.
+            "n_scored": participants.filter(pl.col("n_rounds_total") > 0).height
+            if "n_rounds_total" in participants.columns
+            else n_people,
             "n_eligible": n_eligible,
             "n_own": own_analysis_population(participants).height,
             "n_paired": h5_paired_population(participants).height,

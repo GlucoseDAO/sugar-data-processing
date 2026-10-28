@@ -75,6 +75,29 @@ def read_statistics_csv(
     return combined
 
 
+def game_counter_view(path: Path | str) -> dict[str, int | None] | None:
+    """What the game's own front-page counter sees, to reconcile it with person counts.
+
+    The game counts distinct browser IDs (``study_id``) in its live export only.
+    ``people`` is how many linked persons those browsers are (``None`` without a
+    ``participant_key`` column); ``archived`` is the study IDs found only in the
+    archives beside the export, which the game no longer counts.
+    """
+    paths = statistics_csv_paths(path)
+    if not paths[0].is_file():
+        return None
+    live = pl.read_csv(paths[0], infer_schema_length=0)
+    live_ids = set(live["study_id"].drop_nulls().to_list())
+    archived_ids: set[str] = set()
+    for archive in paths[1:]:
+        archived_ids |= set(pl.read_csv(archive, infer_schema_length=0)["study_id"].drop_nulls().to_list())
+    return {
+        "browser_ids": len(live_ids),
+        "people": live["participant_key"].drop_nulls().n_unique() if "participant_key" in live.columns else None,
+        "archived": len(archived_ids - live_ids),
+    }
+
+
 REQUIRED_COLUMNS: list[str] = [
     "study_id",
     "run_id",
@@ -246,6 +269,7 @@ __all__ = [
     "ARCHIVE_GLOB",
     "REQUIRED_COLUMNS",
     "OPTIONAL_COLUMNS",
+    "game_counter_view",
     "load_prediction_statistics",
     "read_statistics_csv",
     "statistics_csv_paths",

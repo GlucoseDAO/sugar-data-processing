@@ -9,7 +9,11 @@ import polars as pl
 from sugar_data_processing.anonymize import anonymize_statistics_csv
 from sugar_data_processing.fetch import fetch_statistics
 from sugar_data_processing.fixtures.synthetic import write_synthetic_csv
-from sugar_data_processing.gathering.load import load_prediction_statistics, statistics_csv_paths
+from sugar_data_processing.gathering.load import (
+    game_counter_view,
+    load_prediction_statistics,
+    statistics_csv_paths,
+)
 
 
 def _export_with_archive(folder: Path, *, linked: bool) -> tuple[Path, pl.DataFrame, pl.DataFrame]:
@@ -79,3 +83,14 @@ def test_fetch_copies_and_scrubs_archives(tmp_path: Path) -> None:
     copied = dest.with_name("archived_2026-08-19.csv")
     assert result.archives == [copied]
     assert set(pl.read_csv(copied, infer_schema_length=0)["email"].fill_null("").to_list()) == {""}
+
+
+def test_game_counter_view_counts_live_browsers_and_archived_ids(tmp_path: Path) -> None:
+    export, frame, new_games = _export_with_archive(tmp_path, linked=True)
+    view = game_counter_view(export)
+    assert view == {
+        "browser_ids": frame["study_id"].n_unique(),
+        "people": frame["participant_key"].n_unique(),
+        "archived": new_games["study_id"].n_unique(),
+    }
+    assert game_counter_view(tmp_path / "missing.csv") is None

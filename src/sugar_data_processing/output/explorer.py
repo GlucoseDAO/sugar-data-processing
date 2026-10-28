@@ -20,6 +20,7 @@ from sugar_data_processing.config import (
     MAX_PLAUSIBLE_CGM_YEARS,
     MAX_PLAUSIBLE_DIABETES_YEARS,
 )
+from sugar_data_processing.gathering.load import game_counter_view
 from sugar_data_processing.gathering.participants import opposite_trait_summary
 from sugar_data_processing.gathering.sources import classify_data_class
 from sugar_data_processing.output.narration import (
@@ -283,6 +284,7 @@ def _explorer_payload(
         "source_csv": str(source_csv),
         "n_players": participants.height,
         "n_runs": runs.height,
+        "game_counter": game_counter_view(source_csv),
         "format_counts": format_counts,
         "players": _player_rows(participants),
         "ai_players": [] if milestone else (_player_rows(ai_participants) if ai_participants is not None else []),
@@ -1418,7 +1420,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const h1 = power.H1 || {};
       const h2 = power.H2 || {};
       document.getElementById("kpis").innerHTML = `
-        <div class="kpi"><b>${P.n_people}</b><span>${P.linked_identities ? "people played" : "players"}</span><small>with at least one saved game</small></div>
+        <div class="kpi"><b>${P.n_people}</b><span>${P.linked_identities ? "people started a game" : "players started a game"}</span><small>${P.n_scored} of them scored at least one round</small></div>
         <div class="kpi"><b>${P.n_eligible}</b><span>count for the analysis</span><small>6 or more rounds on public traces</small></div>
         <div class="kpi"><b>${t.revised}</b><span>needed in total</span><small>revised target (the plan said ${t.original})</small></div>
         <div class="kpi"><b>+${P.remaining_eligible}</b><span>still needed</span><small>${P.remaining_people ? "about " + P.remaining_people + " new players at today's completion rate" : "spread across the four groups"}</small></div>`;
@@ -1432,9 +1434,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="mark end" style="left:${at(t.revised)}"><span>revised target ${t.revised}</span></div>
         </div>
         <div class="track-labels"><span><b>${P.n_eligible} of ${t.revised}</b> eligible players (${Math.round(100 * P.n_eligible / t.revised)}% of the revised target)</span></div>`;
+      // The game's front page counts browsers in its live file only, so say how that number becomes ours.
+      const g = DATA.game_counter;
+      const archivedNote = g && g.archived ? `, and ${g.archived} more played games the server has since archived` : "";
       document.getElementById("identityNote").textContent = P.linked_identities
-        ? "Players are linked across devices with a pseudonymous key, so each person is counted once."
-        : "Players are counted by browser. Someone who clears their browser or switches device counts twice, so the true number of people is somewhat lower.";
+        ? "Players are linked across devices with a pseudonymous key, so each person is counted once." +
+          (g && g.people != null ? ` The game's front page counts browsers instead: the ${g.browser_ids} browsers in its live file are ${g.people} people here${archivedNote}.` : "")
+        : "Players are counted by browser. Someone who clears their browser or switches device counts twice, so the true number of people is somewhat lower." +
+          (g && g.archived ? ` ${g.archived} of them played games the server has since archived, which the game's front page no longer counts.` : "");
 
       document.getElementById("findings").innerHTML = (P.findings || []).map(findingCard).join("");
 

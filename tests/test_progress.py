@@ -26,6 +26,7 @@ def _progress(tmp_path: Path, **kwargs: object) -> tuple[pl.DataFrame, dict]:
 def test_recruitment_counts_eligible_people_against_quotas(tmp_path: Path) -> None:
     people, progress = _progress(tmp_path)
     assert progress["n_people"] == people.height
+    assert progress["n_scored"] == people.filter(pl.col("n_rounds_total") > 0).height
     assert progress["n_eligible"] == people.filter(pl.col("eligible_primary")).height
     assert sum(cell["target"] for cell in progress["cells"]) == REVISED_TARGET_ELIGIBLE
     deficit = sum(max(0, cell["target"] - cell["now"]) for cell in progress["cells"])
