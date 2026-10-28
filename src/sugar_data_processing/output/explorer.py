@@ -1690,8 +1690,6 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           y: { grid: { display: false }, ticks: { font: { size: 14, weight: "700" } } },
         },
       });
-    },
-      });
     }
 
     function num(value) {

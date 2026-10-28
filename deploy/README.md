@@ -102,7 +102,10 @@ changes trigger a rebuild even at the same Git commit. A build is published
 only if the configured trained models appear in its scores; otherwise the
 existing dashboard stays live. `/deployment.json` records the published Git
 revision, input fingerprint, models, and cohort counts without contact fields.
+Both generated HTML pages also pass a Node.js JavaScript syntax check before
+publication. Set `SDP_NODE` to the Node executable when it is not on the service's
+PATH (OVH uses `/home/web/.nvm/versions/node/v22.23.1/bin/node`).
 
 The defaults can be overridden with `SDP_REPO`, `SDP_DEPLOY_DIR`, `SDP_BRANCH`,
-`SDP_UV`, `SDP_INPUT_CSV`, and `SDP_REQUIRED_MODELS`. A change to the installed script or units must be installed again;
+`SDP_UV`, `SDP_INPUT_CSV`, `SDP_REQUIRED_MODELS`, and `SDP_NODE`. A change to the installed script or units must be installed again;
 pulling application commits does not replace the running deployment tooling.

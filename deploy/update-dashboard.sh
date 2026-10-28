@@ -19,6 +19,7 @@ branch="${SDP_BRANCH:-main}"
 uv="${SDP_UV:-/home/web/.local/bin/uv}"
 input_csv="${SDP_INPUT_CSV:-}"
 required_models="${SDP_REQUIRED_MODELS:-}"
+node_bin="${SDP_NODE:-node}"
 script_path="$(readlink -f -- "$0")"
 build_dir=""
 next_link=""
@@ -109,13 +110,46 @@ build_dir="$(mktemp -d "$deploy_dir/.build.XXXXXXXX")"
 test -s "$build_dir/output/reports/explorer.html"
 test -s "$build_dir/output/reports/milestone.html"
 test -s "$build_dir/output/reports/analysis_report.json"
-python3 - "$build_dir/output/reports" "$revision" "$input_fingerprint" "$required_models" <<'PY'
+python3 - "$build_dir/output/reports" "$revision" "$input_fingerprint" "$required_models" "$node_bin" <<'PY'
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 import json
 from pathlib import Path
+import subprocess
 import sys
 
+
+class InlineScripts(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.active = False
+        self.scripts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == 'script':
+            props = dict(attrs)
+            self.active = not props.get('src') and props.get('type', '') in ('', 'text/javascript', 'application/javascript')
+            if self.active:
+                self.scripts.append('')
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == 'script':
+            self.active = False
+
+    def handle_data(self, data: str) -> None:
+        if self.active:
+            self.scripts[-1] += data
+
+
 reports = Path(sys.argv[1])
+for name in ('explorer.html', 'milestone.html'):
+    page = InlineScripts()
+    page.feed((reports / name).read_text())
+    if not page.scripts:
+        raise SystemExit('No dashboard JavaScript found in ' + name)
+    for script in page.scripts:
+        subprocess.run([sys.argv[5], '--check'], input=script, text=True, check=True)
+print('Dashboard JavaScript syntax validated')
 report = json.loads((reports / 'analysis_report.json').read_text())
 models = sorted({item['model_name'] for item in report['ai']['h6']['comparisons']})
 required = {name.strip() for name in sys.argv[4].split(',') if name.strip()}
