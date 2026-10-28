@@ -925,7 +925,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
       <section>
         <h2>What we have learned so far</h2>
-        <p class="lead">One card per study question. The error is how far a player's drawn forecast was from the real CGM reading, averaged over the next hour, in mg/dL. <b>Lower is better.</b></p>
+        <p class="lead">One card per study question. Accuracy is the MAE (mean absolute error): how far a player's drawn forecast was from the real CGM reading, averaged over the hidden hour and then over the player's rounds, in mg/dL. <b>Lower is better.</b></p>
         <div class="tone-legend"><span style="--tone:#16a34a">Supported or useful finding</span><span style="--tone:#eab308">Not enough data yet</span><span style="--tone:#dc2626">Against our assumptions</span></div>
         <div class="findings" id="findings"></div>
       </section>
@@ -976,7 +976,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <h2>People vs algorithms on the same windows</h2>
         <div class="pair-flat">
           <div>
-            <p class="lead">Algorithms were given exactly the three hours of data the player saw, then scored on the same hidden hour. Bars show average error, split into <b style="color:#E45756">diabetic</b> and <b style="color:#4C78A8">non-diabetic</b> traces because diabetic traces are harder for everyone; <b>shorter is better</b>.</p>
+            <p class="lead">Algorithms were given exactly the three hours of data the player saw, then scored on the same hidden hour. Bars show MAE (mean absolute error) per player: each player's MAE over their rounds, averaged over players. <b>All traces</b> gives the same numbers as the H6 table under "About this page and the AI comparison"; the <b style="color:#E45756">diabetic</b> and <b style="color:#4C78A8">non-diabetic</b> bars split it because diabetic traces are harder for everyone. <b>Shorter is better</b>.</p>
             <ul class="howto">
               <li><b>Persistence</b>: assumes glucose stays at its last value.</li>
               <li><b>Linear trend</b>: extends the recent slope.</li>
@@ -1016,7 +1016,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div id="tab-human" class="tab-panel">
       <section>
         <h2>1. Who took part and how accurate they were</h2>
-        <p class="lead">Use the filters above to narrow every chart on this tab. One dot is one player; their error is the average over all their rounds.</p>
+        <p class="lead">Use the filters above to narrow every chart on this tab. One dot is one player; their MAE (mean absolute error) is averaged over all their rounds.</p>
         <div class="pair">
           <div>
             <h3>Who is in the study</h3>
@@ -1027,22 +1027,22 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="pair">
           <div>
             <h3>How accurate players were</h3>
-            <p class="prose">Each dot is one player's average error in mg/dL. <b>Lower is better.</b> The black dash in each column is that group's median (the middle player).</p>
-            <p class="note">Error is the average distance between the drawn forecast and the real CGM value over the next hour.</p>
+            <p class="prose">Each dot is one player's MAE in mg/dL. <b>Lower is better.</b> The black dash in each column is that group's median (the middle player).</p>
+            <p class="note">MAE (mean absolute error) is the average absolute distance between the drawn forecast and the real CGM value over the next hour; a player's MAE averages it over their rounds.</p>
           </div>
-          <div class="chart-box"><canvas id="swarm" data-title="Error per player by group"></canvas></div>
+          <div class="chart-box"><canvas id="swarm" data-title="MAE per player by group"></canvas></div>
         </div>
         <div class="pair">
           <div>
             <h3>Accuracy on each task</h3>
             <p class="prose"><b>A</b>: public glucose traces from other people. <b>B</b>: the player's own uploaded CGM data. <b>C</b>: a mix of both. One dot per player who played that task; the black dash is the median. Lower is better.</p>
           </div>
-          <div class="chart-box"><canvas id="formats" data-title="Error per player by task"></canvas></div>
+          <div class="chart-box"><canvas id="formats" data-title="MAE per player by task"></canvas></div>
         </div>
       </section>
       <section>
         <h2>2. Main questions: diabetes and CGM use (H1, H2)</h2>
-        <p class="lead">Blue dots are errors on public traces (the main measure), green dots on the player's own data. The dashes mark medians. Each question opens with a plain-language verdict card.</p>
+        <p class="lead">Blue dots are each player's MAE on public traces (the main measure), green dots on the player's own data. The dashes mark medians. Each question opens with a plain-language verdict card.</p>
         <div class="tone-legend"><span style="--tone:#16a34a">Supported or useful finding</span><span style="--tone:#eab308">Not enough data yet</span><span style="--tone:#dc2626">Against our assumptions</span></div>
         <div class="pair">
           <div class="prose" id="h1Text"></div>
@@ -1063,14 +1063,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       </section>
       <section>
         <h2>3. Experience and own data (H3–H5)</h2>
-        <p class="lead">If experience helps, dots should drift down (smaller errors) as the months increase.</p>
+        <p class="lead">If experience helps, dots should drift down (lower MAE) as the months increase.</p>
         <div class="pair">
           <div class="prose" id="h3Text"></div>
-          <div class="chart-box"><canvas id="h3" data-title="H3: months with diabetes vs error"></canvas></div>
+          <div class="chart-box"><canvas id="h3" data-title="H3: months with diabetes vs MAE"></canvas></div>
         </div>
         <div class="pair">
           <div class="prose" id="h4Text"></div>
-          <div class="chart-box"><canvas id="h4" data-title="H4: months using a CGM vs error"></canvas></div>
+          <div class="chart-box"><canvas id="h4" data-title="H4: months using a CGM vs MAE"></canvas></div>
         </div>
         <div class="pair">
           <div>
@@ -1088,14 +1088,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="pair">
           <div>
             <div class="prose" id="oppositeText"></div>
-            <p class="note">Chart: dots <b>above the dashed line</b> made larger errors on the other group's traces than on their own group's traces.</p>
+            <p class="note">Chart: dots <b>above the dashed line</b> had a higher MAE on the other group's traces than on their own group's traces.</p>
           </div>
           <div class="chart-box"><canvas id="opposite" data-title="Same-group vs other-group traces"></canvas></div>
         </div>
       </section>
       <section>
         <h2>5. Players in the current filter</h2>
-        <p class="lead">Errors in mg/dL. Click a row to open that player on the Individual players tab.</p>
+        <p class="lead">MAE (mean absolute error) in mg/dL. Click a row to open that player on the Individual players tab.</p>
         <div class="card wide">
           <div class="table-wrap">
             <table>
@@ -1107,7 +1107,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
                   <th data-key="n_runs">games</th>
                   <th data-key="formats">tasks</th>
                   <th data-key="challenge_unknown">challenge</th>
-                  <th data-key="mae_primary">error</th>
+                  <th data-key="mae_primary">MAE</th>
                   <th data-key="mae_generic">public</th>
                   <th data-key="mae_own">own</th>
                   <th data-key="mae_same">same group</th>
@@ -1144,10 +1144,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <p class="note">Slide left to show only people, right to show only the model, middle for both. The group buttons filter the charts below. Click any chart to enlarge it.</p>
         <div class="pair">
           <div>
-            <h3>Error on each task</h3>
+            <h3>MAE on each task</h3>
             <p class="prose">Same player, same task. <b>Blue</b> dots are people, <b>purple</b> dots are the primary model. Lower is better.</p>
           </div>
-          <div class="chart-box"><canvas id="aiTaskMae" class="zoomable" data-title="People vs AI error per task"></canvas></div>
+          <div class="chart-box"><canvas id="aiTaskMae" class="zoomable" data-title="People vs AI MAE per task"></canvas></div>
         </div>
         <div class="pair">
           <div>
@@ -1266,7 +1266,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     Chart.defaults.plugins.tooltip.padding = 10;
     Chart.defaults.plugins.tooltip.cornerRadius = 8;
     Chart.defaults.scale.grid.color = "rgba(15, 23, 42, 0.06)";
-    const ERROR_AXIS = "Average error per player (mg/dL) · lower is better";
+    const ERROR_AXIS = "MAE per player (mg/dL) · lower is better";
     const mgTooltip = {
       callbacks: {
         label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(1)} mg/dL`,
@@ -1374,7 +1374,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const lo = Math.floor(Math.min(...values) - 1);
       const hi = Math.ceil(Math.max(...values) + 1);
       return {
-        label: label || "Same error on both",
+        label: label || "Same MAE on both",
         data: [{ x: lo, y: lo }, { x: hi, y: hi }],
         showLine: true,
         borderColor: "#64748b",
@@ -1630,6 +1630,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const trained = comps.some((c) => ["glumind", "sugar_one", "citras", "citras_w38_2", "kronlstm"].includes(c.model_name));
       const models = availableModels();
       const classes = [
+        { key: "all", label: "All traces", color: "#334155" },
         { key: "diabetic", label: "Diabetic traces", color: COLORS.diabetic_cgm },
         { key: "nondiabetic", label: "Non-diabetic traces", color: COLORS.nondiabetic_cgm },
       ];
@@ -1645,49 +1646,64 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         return n ? sum / n : null;
       };
       // Only rounds every forecaster scored, so each bar covers the same windows.
+      const scored = (DATA.traces || []).filter((t) => roundMae(t, t.human) !== null
+        && models.every((m) => roundMae(t, (t.models || {})[m]) !== null));
+      // As in H6, a player's MAE comes from their public-trace rounds when they have any and
+      // from their own-data rounds otherwise, and players count once each, so the
+      // "All traces" bars equal the H6 table under "About this page and the AI comparison".
+      const withPublic = new Set(scored.filter((t) => t.source === "generic").map((t) => t.study_id));
+      const primary = scored.filter((t) => t.source === "generic" || !withPublic.has(t.study_id));
+      const perPlayer = (rounds, values) => {
+        const byPlayer = new Map();
+        rounds.forEach((t) => {
+          const list = byPlayer.get(t.study_id) || [];
+          list.push(roundMae(t, values(t)));
+          byPlayer.set(t.study_id, list);
+        });
+        const means = [...byPlayer.values()].map((list) => list.reduce((a, b) => a + b, 0) / list.length);
+        return means.length ? means.reduce((a, b) => a + b, 0) / means.length : null;
+      };
       const summary = classes.map((cls) => {
-        const rounds = (DATA.traces || []).filter((t) => t.data_class === cls.key
-          && roundMae(t, t.human) !== null && models.every((m) => roundMae(t, (t.models || {})[m]) !== null));
-        const avg = (fn) => rounds.length ? rounds.reduce((acc, t) => acc + fn(t), 0) / rounds.length : null;
+        const rounds = primary.filter((t) => cls.key === "all" || t.data_class === cls.key);
         return {
           ...cls,
           rounds: rounds.length,
           players: new Set(rounds.map((t) => t.study_id)).size,
-          values: Object.fromEntries([["People", avg((t) => roundMae(t, t.human))]].concat(
-            models.map((m) => [modelLabel(m), avg((t) => roundMae(t, t.models[m]))])
+          values: Object.fromEntries([["People", perPlayer(rounds, (t) => t.human)]].concat(
+            models.map((m) => [modelLabel(m), perPlayer(rounds, (t) => t.models[m])])
           )),
         };
       });
-      const labels = ["People"].concat(models.map(modelLabel));
-      const overall = (label) => {
-        const vals = summary.map((s) => s.values[label]).filter((v) => v !== null);
-        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : Infinity;
-      };
-      const ordered = ["People"].concat(labels.slice(1).sort((a, b) => overall(a) - overall(b)));
+      const [all, diabetic, nondiabetic] = summary;
+      const overall = (label) => all.values[label] === null ? Infinity : all.values[label];
+      const ordered = ["People"].concat(models.map(modelLabel).sort((a, b) => overall(a) - overall(b)));
+      const leftOut = scored.length - primary.length;
       document.getElementById("aiGlanceNote").textContent =
-        summary.map((s) => `${s.label}: ${s.rounds} rounds from ${s.players} players`).join(" · ") +
-        ". Only rounds that every forecaster scored." +
+        `${all.players} players, ${all.rounds} rounds that every forecaster scored: ` +
+        `${diabetic.players} players (${diabetic.rounds} rounds) on diabetic traces and ` +
+        `${nondiabetic.players} (${nondiabetic.rounds} rounds) on non-diabetic traces; a player who saw both kinds counts in both.` +
+        (leftOut ? ` As in the H6 test, own-data rounds count only for players with no public-trace rounds, so ${leftOut} own-data rounds are left out.` : "") +
         (trained ? "" : " Only the simple baselines were scored in this build; the trained models are not included yet.");
       const values = summary.flatMap((s) => Object.values(s.values)).filter((v) => v !== null);
       const top = values.length ? Math.max(...values) * 1.2 : 30;
       upsertChart("aiGlance", "bar", {
         labels: ordered,
         datasets: summary.map((s) => ({
-          label: `${s.label} (${s.rounds} rounds)`,
+          label: `${s.label} (${s.players} players)`,
           data: ordered.map((label) => s.values[label]),
           backgroundColor: hexAlpha(s.color, 0.85),
           borderRadius: 5,
-          maxBarThickness: 18,
+          maxBarThickness: 16,
         })),
       }, {
         indexAxis: "y",
         plugins: {
           legend: { position: "bottom" },
           barValues: { enabled: true },
-          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.x).toFixed(1)} mg/dL` } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: MAE ${Number(ctx.parsed.x).toFixed(1)} mg/dL` } },
         },
         scales: {
-          x: { beginAtZero: true, max: Math.ceil(top / 5) * 5, title: { display: true, text: "Average error per round over the hidden hour (mg/dL) · shorter is better" } },
+          x: { beginAtZero: true, max: Math.ceil(top / 5) * 5, title: { display: true, text: "MAE per player over the hidden hour (mg/dL) · shorter is better" } },
           y: { grid: { display: false }, ticks: { font: { size: 14, weight: "700" } } },
         },
       });
@@ -1792,12 +1808,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         el.innerHTML = `<p>No model scores on reconstructed windows yet. Sequences live in <code>${DATA.sequences_dir || "data/processed/ai"}</code>. Models only see the 24 visible points of the 3-hour game slice.</p>`;
         return;
       }
-      const modelRows = Object.entries(c.model_mean_mae || {}).map(([name, mae]) => `<tr><td>${name}</td><td>${fmt(mae)}</td></tr>`).join("");
+      const pooled = Object.entries(c.model_mean_mae || {}).sort((a, b) => a[1] - b[1]);
+      const rows = [["People", c.human_mean_mae]].concat(pooled.map(([name, mae]) => [modelLabel(name), mae]))
+        .map(([label, mae]) => `<tr><td>${esc(label)}</td><td>${fmt(mae)}</td></tr>`).join("");
       el.innerHTML = `
-        <p>Scored <strong>${c.n_points}</strong> points across <strong>${c.n_people}</strong> people.
-        Human point MAE on that subset: <strong>${fmt(c.human_mean_mae)}</strong> mg/dL.
-        Primary model: <code>${DATA.primary_model || "—"}</code>.</p>
-        <table><thead><tr><th>Model</th><th>MAE</th></tr></thead><tbody>${modelRows}</tbody></table>`;
+        <p><b>Pooled MAE.</b> The H6 table and the chart above average each player's MAE first, so every player counts once.
+        This table instead pools every scored forecast point from all ${c.n_people} players, own-data rounds included,
+        so players with more rounds weigh more and the numbers differ slightly.</p>
+        <table><thead><tr><th>Forecaster</th><th>Pooled MAE (mg/dL)</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     function renderLegend() {
@@ -2347,7 +2365,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="stat"><b>${rows.filter((p) => p.repeat).length}</b><span>played more than once</span></div>
         <div class="stat"><b>${rows.filter((p) => p.challenge_unknown).length}</b><span>chose "challenge the unknown"</span></div>
         <div class="stat"><b>${rows.filter((p) => p.opposite_trait).length}</b><span>predicted the other group</span></div>
-        <div class="stat"><b>${fmt(mean(rows.map((p) => num(p.mae_primary))))}</b><span>average error, mg/dL</span></div>
+        <div class="stat"><b>${fmt(mean(rows.map((p) => num(p.mae_primary))))}</b><span>mean player MAE, mg/dL</span></div>
         <div class="stat"><b>${betterOwn}/${allFormats.length || 0}</b><span>better on own data (played A, B and C)</span></div>
         <div class="stat"><b>${(DATA.traces || []).length}</b><span>rounds replayed for AI</span></div>
       `;
@@ -2404,7 +2422,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           pointRadius: people.map((p) => p.challenge_unknown ? 7 : 5),
         };
       }).filter((ds) => ds.data.length);
-      const clusterLine = diagonal(clusterSets.flatMap((ds) => ds.data), "Same error on both");
+      const clusterLine = diagonal(clusterSets.flatMap((ds) => ds.data), "Same MAE on both");
       upsertChart(clustersId, "scatter", {
         datasets: clusterLine ? clusterSets.concat([clusterLine]) : clusterSets,
       }, {
@@ -2413,8 +2431,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: public ${Number(ctx.parsed.x).toFixed(1)}, own ${Number(ctx.parsed.y).toFixed(1)} mg/dL` } },
         },
         scales: {
-          x: { title: { display: true, text: "Error on public traces (mg/dL)" } },
-          y: { title: { display: true, text: "Error on own data (mg/dL)" } },
+          x: { title: { display: true, text: "MAE on public traces (mg/dL)" } },
+          y: { title: { display: true, text: "MAE on own data (mg/dL)" } },
         },
       });
 
@@ -2549,7 +2567,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       if (document.getElementById(oppositeId)) {
         const both = rows.filter((p) => num(p.mae_same) !== null && num(p.mae_opposite) !== null)
           .map((p) => ({ x: num(p.mae_same), y: num(p.mae_opposite) }));
-        const line = diagonal(both, "Same error on both");
+        const line = diagonal(both, "Same MAE on both");
         const sets = [{ label: "Players who predicted both", data: both, backgroundColor: hexAlpha(COLORS.diabetic_cgm, 0.85) }];
         upsertChart(oppositeId, "scatter", {
           datasets: line ? sets.concat([line]) : sets,
@@ -2559,8 +2577,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
             tooltip: { callbacks: { label: (ctx) => `own group ${Number(ctx.parsed.x).toFixed(1)}, other group ${Number(ctx.parsed.y).toFixed(1)} mg/dL` } },
           },
           scales: {
-            x: { title: { display: true, text: "Error on own group's traces (mg/dL)" } },
-            y: { title: { display: true, text: "Error on the other group's traces (mg/dL)" } },
+            x: { title: { display: true, text: "MAE on own group's traces (mg/dL)" } },
+            y: { title: { display: true, text: "MAE on the other group's traces (mg/dL)" } },
           },
         });
       }
@@ -2699,7 +2717,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
               callback: (v) => Number.isInteger(v) ? ((tasks[v] || {}).label || "") : "",
             },
           },
-          y: { title: { display: true, text: "Average error on that task (mg/dL) · lower is better" } },
+          y: { title: { display: true, text: "MAE on that task (mg/dL) · lower is better" } },
         },
       });
 
@@ -2746,13 +2764,13 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           _baseColor: color,
         });
       });
-      const clusterLine = diagonal(datasets.filter((ds) => ds._who !== "link").flatMap((ds) => ds.data), "Same error on both");
+      const clusterLine = diagonal(datasets.filter((ds) => ds._who !== "link").flatMap((ds) => ds.data), "Same MAE on both");
       if (clusterLine) datasets.push(clusterLine);
       replaceChart("aiCluster", "scatter", { datasets }, {
         plugins: { legend: { position: "bottom", labels: { filter: legendFilter } } },
         scales: {
-          x: { title: { display: true, text: "Error on public traces, task A (mg/dL)" } },
-          y: { title: { display: true, text: "Error on own data, task B (mg/dL)" } },
+          x: { title: { display: true, text: "MAE on public traces, task A (mg/dL)" } },
+          y: { title: { display: true, text: "MAE on own data, task B (mg/dL)" } },
         },
       });
       applyWhoOpacity();

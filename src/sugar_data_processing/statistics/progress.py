@@ -460,7 +460,8 @@ def _p(p: float | None) -> str:
 
 
 def _mg(value: float | None) -> str:
-    return "—" if value is None else f"{value:.1f} mg/dL"
+    """Every value the cards print is a MAE, so the cards say so."""
+    return "—" if value is None else f"MAE {value:.1f} mg/dL"
 
 
 def _pct(value: float | None) -> str:
@@ -702,8 +703,8 @@ def _findings(
     if mean is not None and simple:
         cards.append(_card(
             "Context", "How good are people at this?", "context",
-            f"The average person is off by {_mg(mean)} over the next hour.",
-            f"{benchmarks.get('pct_inside_simple_baseline_band', 0):.0f}% of people fall inside the "
+            f"The average player's MAE over the next hour is {mean:.1f} mg/dL.",
+            f"{benchmarks.get('pct_inside_simple_baseline_band', 0):.0f}% of people have an MAE inside the "
             f"{simple[0]:g}–{simple[1]:g} mg/dL range of simple published models (GlucoBench).",
         ))
     return cards

@@ -9,6 +9,7 @@ import polars as pl
 
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext
 from sugar_data_processing.statistics.catalog import HYPOTHESES
+from sugar_data_processing.statistics.progress import MODEL_LABELS
 from sugar_data_processing.verification.report import VerificationReport
 
 STATS_GLOSSARY: str = """
@@ -161,24 +162,33 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
     )
     if key == "h6":
         if result and result.get("status") == "scored":
+            comparisons = sorted(
+                result.get("comparisons") or [], key=lambda item: item.get("model_mean_mae") or 0.0
+            )
             rows = []
-            for item in result.get("comparisons") or []:
+            for item in comparisons:
                 human = item.get("human_mean_mae")
                 model = item.get("model_mean_mae")
-                name = item.get("model_name")
+                name = str(item.get("model_name") or "")
                 rows.append(
-                    f"| `{name}` | "
+                    f"| {MODEL_LABELS.get(name, name)} | "
                     f"{human:.2f} | {model:.2f} | "
                     f"{item.get('test_used', '—')} | "
                     f"{_fmt_p(item.get('p_value'))} |"
                 )
             table = "\n".join(rows) or "| — | — | — | — | — |"
             lookback = result.get("lookback") or ""
+            n_players = max((int(item.get("n") or 0) for item in comparisons), default=0)
             return (
                 header
                 + "**Status:** scored on the same 3-hour windows the humans played.\n\n"
                 + f"{lookback}\n\n"
-                + "| Model | Human MAE | Model MAE | Test | p |\n"
+                + "All numbers are **MAE** (mean absolute error) in mg/dL, per player: a round's MAE "
+                "averages the absolute distance between forecast and real CGM over the hidden hour; a "
+                "player's MAE averages their rounds the model scored (public-trace rounds when they have "
+                f"any, otherwise own-data rounds); the table averages the {n_players} players. The test "
+                "pairs each player's MAE with the model's on the same rounds.\n\n"
+                + "| Model | People MAE | Model MAE | Test | p |\n"
                 + "| --- | ---: | ---: | --- | --- |\n"
                 + table
                 + "\n"
@@ -313,14 +323,15 @@ def explain_edition_and_ai_path() -> str:
         "same-person comparison of human vs AI MAE on Generic (A), Own (B), "
         "and Mixed (C). Person traits do not move the model, so the AI half "
         "does not repeat H1–H4. The explorer (`explorer.html`) has four tabs "
-        "— Overview, Human, AI, and People (all rounds for one person, "
+        "— Overview, Results, People vs AI, and Individual players (all rounds for one person, "
         "Next / Previous to walk the cohort).\n\n"
         "Models only see the **3-hour game window** the human saw (24 visible "
         "points, left-padded to the 128-step model lookback). Own-data rounds "
         "use the upload saved under sugar-sugar `data/input/users`.\n\n"
         "1. **Export** — one row per forecast point.\n"
         "2. **Convert / score** — rebuild the 36-point window, write "
-        "`ml_ready.csv`, run persistence, linear, and SugarOne when available.\n"
+        "`ml_ready.csv`, score persistence, linear trend and whichever of GlucoseDAO's trained "
+        "models are available (CITRAS-FM, KronLSTM, GluMind).\n"
         "3. **Compare** — H6 is the paired human-vs-model test on those windows "
         "(evaluation mode: **post factum**; in-place live-game scores are not collected yet)."
     )
