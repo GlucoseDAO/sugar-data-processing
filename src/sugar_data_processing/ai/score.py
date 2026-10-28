@@ -10,6 +10,7 @@ from eliot import start_action
 
 from sugar_data_processing.ai.citras import score_all_citras_windows
 from sugar_data_processing.ai.convert import pad_context, write_ml_ready_csv
+from sugar_data_processing.ai.kronlstm import KRONLSTM_MODEL_NAME, score_kronlstm_windows
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
     EVALUATION_MODE_POST_FACTUM,
@@ -24,6 +25,7 @@ MODEL_GLUMIND: str = "glumind"
 MODEL_SUGAR_ONE: str = "sugar_one"
 MODEL_CITRAS: str = "citras"
 MODEL_CITRAS_W38_2: str = "citras_w38_2"
+MODEL_KRONLSTM: str = KRONLSTM_MODEL_NAME
 
 
 def score_windows(
@@ -38,7 +40,8 @@ def score_windows(
     (slope of the last six visible points). ``glumind`` is added when a
     sibling glucose-forecasting checkout can load ``test_model`` and torch.
     ``citras`` / ``citras_w38_2`` are added when the matching dual-mode ONNX
-    bundle is on disk or downloadable with ``HF_TOKEN``.
+    bundle is on disk or downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed
+    R.80, two ONNX graphs) is added on the same terms.
     """
     with start_action(action_type="ai.score_windows", n_windows=len(windows)) as action:
         if ml_ready_path is not None:
@@ -46,6 +49,7 @@ def score_windows(
         rows: list[dict[str, object]] = []
         deep = _score_glumind_batch(windows, forecasting_root)
         citras_by_model = score_all_citras_windows(windows)
+        kronlstm = score_kronlstm_windows(windows)
         for window in windows:
             preds = {
                 MODEL_PERSISTENCE: _persistence(window.context_mgdl),
@@ -57,6 +61,8 @@ def score_windows(
             for model_name, by_key in citras_by_model.items():
                 if key in by_key:
                     preds[model_name] = by_key[key]
+            if key in kronlstm:
+                preds[MODEL_KRONLSTM] = kronlstm[key]
             for model_name, values in preds.items():
                 for index, value in enumerate(values):
                     rows.append(
