@@ -28,12 +28,15 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 | **H3** | Diabetes duration (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H4** | CGM experience (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
-| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / GluMind (`torch` + a glucose-forecasting checkout with `test_model`, named by `GLUCOSE_FORECASTING_DIR` or found beside this repository) |
+| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / SugarOne (a glucose-forecasting checkout with `fixtures/checkpoints/sugar_one_1.0`, named by `GLUCOSE_FORECASTING_DIR` or found beside this repository) / the ONNX models below |
 
-The dashboard uses the model names the paper will use: **SugarOne** is GluMind,
-**CitricSugar** is CITRAS-FM W38.2, **Kronsugar** is KronLSTM R.80 and **Sugarstral**
-is Timestral-28M R.81. CITRAS-FM W38.7 is no longer scored: on the game windows its
-MAE was 15.07 mg/dL against W38.2's 14.97 mg/dL.
+The dashboard uses the model names the paper will use: **SugarOne** is glucose-forecasting's
+production SugarOne 1.0 checkpoint, **CitricSugar** is CITRAS-FM W38.2, **Kronsugar** is
+KronLSTM R.80 and **Sugarstral** is Timestral-28M R.81. Only the best of each family is
+scored. CITRAS-FM W38.7 is not: on the game windows its MAE was 15.07 mg/dL against W38.2's
+14.97 mg/dL. GluMind is not either: on the joined Loop + AI-READI test set SugarOne 1.0 has
+an MAE of 12.40 mg/dL against GluMind's 12.73. The game has no insulin or carbs, so SugarOne
+sees those channels as zero.
 
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.
@@ -266,7 +269,7 @@ Resolution order for `analyze` without `--csv` / `--fixture`:
 | `output/figures/*.png` | Plots (also copied under `output/reports/figures/`) |
 | `data/processed/participants.csv` | Person-level analysis table |
 
-Scoring the trained models (CITRAS-FM, KronLSTM, Timestral, GluMind) on every window takes
+Scoring the trained models (CITRAS-FM, KronLSTM, Timestral, SugarOne) on every window takes
 minutes, so each build keeps their forecasts in `data/processed/model_cache/`. The
 next build scores only windows that are new or whose visible three hours changed;
 new model files or a change to a model's scoring code score every window again.

@@ -9,7 +9,7 @@ import pytest
 
 from sugar_data_processing.ai.export import export_prediction_sequences
 from sugar_data_processing.ai.citras import CITRAS_CHANNELS, featurize_forward_window
-from sugar_data_processing.ai.score import MODEL_CITRAS_W38_2, MODEL_GLUMIND, score_windows
+from sugar_data_processing.ai.score import MODEL_CITRAS_W38_2, MODEL_SUGAR_ONE, score_windows
 from sugar_data_processing.ai.sequences import known_data_rounds
 from sugar_data_processing.ai.ingest import ingest_model_predictions, load_model_predictions
 from sugar_data_processing.ai.report import write_ai_report
@@ -24,6 +24,7 @@ from sugar_data_processing.config import (
     CITRAS_PAST_STEPS,
     CITRAS_SEQ_LEN,
     FORECASTING_ROOT_ENV,
+    SUGAR_ONE_RUN_DIR,
     find_citras_bundle,
     find_forecasting_root,
 )
@@ -133,7 +134,7 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert "GluMind" not in html
     assert 'data-line="' in html
     assert 'id="aiGlanceModels"' in html
-    assert "sugar_one" not in html
+    assert "glumind" not in html
     assert "nextPerson" in html
     assert "line_styles" in html
     assert "aiTaskMae" in html
@@ -165,7 +166,7 @@ def test_ingest_model_scores_and_ai_report(tmp_path: Path) -> None:
     assert 'data-tab="people"' not in milestone
 
 
-def test_sugar_one_predictions_load_as_glumind(tmp_path: Path) -> None:
+def test_sugar_one_predictions_stay_and_retired_glumind_is_dropped(tmp_path: Path) -> None:
     path = tmp_path / "preds.csv"
     pl.DataFrame(
         {
@@ -173,11 +174,11 @@ def test_sugar_one_predictions_load_as_glumind(tmp_path: Path) -> None:
             "run_id": ["r1", "r1"],
             "round_number": [1, 1],
             "point_index": [0, 0],
-            "model_name": ["sugar_one", "linear"],
+            "model_name": ["sugar_one", "glumind"],
             "model_predicted_mgdl": [120.0, 118.0],
         }
     ).write_csv(path)
-    assert load_model_predictions(path)["model_name"].to_list() == [MODEL_GLUMIND, "linear"]
+    assert load_model_predictions(path)["model_name"].to_list() == [MODEL_SUGAR_ONE]
 
 
 def test_retired_citras_w38_7_predictions_are_dropped(tmp_path: Path) -> None:
@@ -293,26 +294,28 @@ def test_citras_scores_one_real_window() -> None:
 
 def test_forecasting_root_reads_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     checkout = tmp_path / "anywhere" / "glucose-forecasting"
-    (checkout / "scripts" / "glumind").mkdir(parents=True)
-    (checkout / "scripts" / "glumind" / "glumind_model.py").write_text("")
+    (checkout / "src" / "sugar_one").mkdir(parents=True)
+    (checkout / "src" / "sugar_one" / "sugar_one_model.py").write_text("")
     monkeypatch.setenv(FORECASTING_ROOT_ENV, str(checkout))
     assert find_forecasting_root() == checkout.resolve()
     assert find_forecasting_root(tmp_path / "missing") == checkout.resolve()
 
 
-def test_glumind_scores_one_real_window() -> None:
+def test_sugar_one_scores_one_real_window() -> None:
     root = find_forecasting_root()
-    if root is None or not (root / "test_model" / "best_model.pt").exists():
-        pytest.skip(f"GluMind is not on this machine: set {FORECASTING_ROOT_ENV} to a glucose-forecasting "
-                    "checkout that has scripts/glumind and test_model/best_model.pt")
+    if root is None or not (root / SUGAR_ONE_RUN_DIR / "best_model.pt").exists():
+        pytest.skip(f"SugarOne is not on this machine: set {FORECASTING_ROOT_ENV} to a glucose-forecasting "
+                    f"checkout that has {SUGAR_ONE_RUN_DIR}/best_model.pt")
     scored = score_windows([_sample_window()], forecasting_root=root)
     names = set(scored["model_name"].to_list())
-    assert {"persistence", "linear", MODEL_GLUMIND} <= names
-    glu = scored.filter(pl.col("model_name") == MODEL_GLUMIND)
-    assert glu.height == 12
-    assert glu["model_predicted_mgdl"].null_count() == 0
-    values = [float(v) for v in glu["model_predicted_mgdl"].to_list()]
+    assert {"persistence", "linear", MODEL_SUGAR_ONE} <= names
+    one = scored.filter(pl.col("model_name") == MODEL_SUGAR_ONE).sort("point_index")
+    assert one.height == 12
+    assert one["model_predicted_mgdl"].null_count() == 0
+    values = [float(v) for v in one["model_predicted_mgdl"].to_list()]
     assert all(40.0 <= v <= 400.0 for v in values)
+    # The forecast continues from the last visible reading (123 mg/dL).
+    assert abs(values[0] - 123.0) < 15.0
 
 
 def test_task_comparison_pairs_only_complete_same_users() -> None:

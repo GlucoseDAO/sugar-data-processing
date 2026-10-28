@@ -57,7 +57,7 @@ LINE_STYLES: dict[str, dict[str, str]] = {
     "human": {"color": "#2563eb", "dash": "dashed", "label": "Human"},
     "persistence": {"color": "#ea580c", "dash": "dotted", "label": "AI persistence"},
     "linear": {"color": "#16a34a", "dash": "dashdot", "label": "AI linear"},
-    "glumind": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne"},
+    "sugar_one": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne"},
     "citras_w38_2": {"color": "#0891b2", "dash": "solid", "label": "AI CitricSugar"},
     "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI Kronsugar"},
     "timestral": {"color": "#ca8a04", "dash": "dashed", "label": "AI Sugarstral"},

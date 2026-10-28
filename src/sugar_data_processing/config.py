@@ -120,9 +120,13 @@ DEFAULT_SUGAR_SUGAR_ROOT: Path = REPO_ROOT.parent / "sugar-sugar"
 DEFAULT_FORECASTING_ROOT: Path = (
     REPO_ROOT.parent.parent / "glucose-forecasting" / "glucose-forecasting"
 )
-# The glucose-forecasting checkout that holds GluMind (scripts/glumind and test_model) differs per
-# machine, so this variable names it; the locations below are only fallbacks for common layouts.
+# The glucose-forecasting checkout that holds SugarOne differs per machine, so this variable
+# names it; the locations below are only fallbacks for common layouts. SugarOne 1.0 is that
+# repository's production checkpoint (trial bcd3813f, test MAE 12.40 mg/dL on Loop + AI-READI),
+# the best SugarOne; it replaced GluMind here, which scored 12.73 on the same test set.
 FORECASTING_ROOT_ENV: str = "GLUCOSE_FORECASTING_DIR"
+SUGAR_ONE_MODEL_SOURCE: Path = Path("src") / "sugar_one" / "sugar_one_model.py"
+SUGAR_ONE_RUN_DIR: Path = Path("fixtures") / "checkpoints" / "sugar_one_1.0"
 FORECASTING_ROOT_CANDIDATES: tuple[Path, ...] = (
     REPO_ROOT.parent / "glucose-forecasting",
     DEFAULT_FORECASTING_ROOT,
@@ -171,7 +175,7 @@ CITRAS_MODELS: tuple[CitrasModelSpec, ...] = (
 
 
 def find_forecasting_root(explicit: Path | None = None) -> Path | None:
-    """First checkout that contains the GluMind sources: ``explicit``, then ``$GLUCOSE_FORECASTING_DIR``,
+    """First checkout that contains the SugarOne sources: ``explicit``, then ``$GLUCOSE_FORECASTING_DIR``,
     then the sibling locations in :data:`FORECASTING_ROOT_CANDIDATES`."""
     ordered: list[Path] = []
     if explicit is not None:
@@ -186,7 +190,7 @@ def find_forecasting_root(explicit: Path | None = None) -> Path | None:
         if resolved in seen:
             continue
         seen.add(resolved)
-        if (resolved / "scripts" / "glumind" / "glumind_model.py").exists():
+        if (resolved / SUGAR_ONE_MODEL_SOURCE).exists():
             return resolved
     return None
 

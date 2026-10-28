@@ -1,7 +1,7 @@
 """Post-factum scoring of saved Sugar Sugar games.
 
 Rebuild the 3-hour window the human saw, convert it to the glucose-forecasting
-CSV layout, score persistence / linear / GluMind (when present), then fold
+CSV layout, score persistence / linear / the trained models (when present), then fold
 those MAE values into the merged report.
 """
 

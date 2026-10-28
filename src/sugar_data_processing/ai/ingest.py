@@ -24,11 +24,10 @@ REQUIRED_MODEL_COLUMNS: tuple[str, ...] = (
 )
 
 JOIN_KEYS: tuple[str, ...] = ("study_id", "run_id", "round_number", "point_index")
-# Some older prediction files call GluMind by its published name, SugarOne.
-MODEL_ALIASES: dict[str, str] = {"sugar_one": "glumind"}
 # CITRAS-FM W38.7 scored worse than W38.2 and is no longer compared; older
-# prediction files still carry it as ``citras``.
-RETIRED_MODELS: frozenset[str] = frozenset({"citras"})
+# prediction files still carry it as ``citras``. GluMind gave way to SugarOne,
+# which beats it on the same test set; older files still carry ``glumind``.
+RETIRED_MODELS: frozenset[str] = frozenset({"citras", "glumind"})
 
 
 @dataclass(frozen=True)
@@ -65,7 +64,7 @@ def load_model_predictions(path: Path | str) -> pl.DataFrame:
         pl.col("run_id").cast(pl.Utf8),
         pl.col("round_number").cast(pl.Int64),
         pl.col("point_index").cast(pl.Int64),
-        pl.col("model_name").cast(pl.Utf8).replace(MODEL_ALIASES),
+        pl.col("model_name").cast(pl.Utf8),
         pl.col("model_predicted_mgdl").cast(pl.Float64, strict=False),
         pl.col("evaluation_mode").cast(pl.Utf8),
     )

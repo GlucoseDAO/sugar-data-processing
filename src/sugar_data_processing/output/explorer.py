@@ -1248,12 +1248,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       human: "triangle",
       persistence: "rect",
       linear: "rectRot",
-      glumind: "star",
+      sugar_one: "star",
       citras_w38_2: "cross",
       kronlstm: "triangle",
       timestral: "crossRot",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "glumind", "citras_w38_2", "kronlstm", "timestral"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "sugar_one", "citras_w38_2", "kronlstm", "timestral"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
@@ -1675,7 +1675,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const comps = ((DATA.h6 || {}).comparisons || []).filter((c) => num(c.model_mean_mae) !== null);
       if (!card || !comps.length) return;
       card.hidden = false;
-      const trained = comps.some((c) => ["glumind", "citras_w38_2", "kronlstm", "timestral"].includes(c.model_name));
+      const trained = comps.some((c) => ["sugar_one", "citras_w38_2", "kronlstm", "timestral"].includes(c.model_name));
       const models = availableModels();
       const classes = [
         { key: "all", label: "All traces", color: "#334155" },
@@ -1938,14 +1938,14 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function showMissingModel(ids) {
       const note = document.getElementById("missingModel");
-      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.glumind || t.models.citras_w38_2 || t.models.kronlstm || t.models.timestral));
+      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.sugar_one || t.models.citras_w38_2 || t.models.kronlstm || t.models.timestral));
       if (haveDeep || !ids.length) {
         note.hidden = true;
         note.textContent = "";
         return;
       }
       note.hidden = false;
-      note.textContent = "Purple SugarOne is missing because it was not scored. The sibling repo has its weights in test_model, but this environment does not have torch loaded. Persistence (orange) and linear (green) are the AI lines present now.";
+      note.textContent = "GlucoseDAO's trained models are missing because none was scored in this build. Persistence (orange) and linear (green) are the AI lines present now.";
     }
 
     function lineSeries(label, values, key) {
