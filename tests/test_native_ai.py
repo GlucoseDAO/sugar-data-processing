@@ -86,9 +86,9 @@ def test_human_report_is_everyone_and_ai_is_the_recent_cohort(tmp_path: Path) ->
         if study_id not in set(cohort.study_ids)
     )
     predictions = recent.select(["study_id", "run_id", "round_number", "point_index"]).with_columns(
-        pl.lit("glumind").alias("model_name"),
+        pl.lit("kronos").alias("model_name"),
         pl.lit(100.0).alias("model_predicted_mgdl"),
-        pl.lit(EVALUATION_MODE_POST_FACTUM).alias("evaluation_mode"),
+        pl.lit(EVALUATION_MODE_IN_PLACE).alias("evaluation_mode"),
     )
     decoy = predictions.head(1).with_columns(pl.lit(str(older)).alias("study_id"))
     path = tmp_path / "model_predictions.csv"
@@ -119,7 +119,7 @@ def test_native_csv_roundtrip_and_milestone_page(tmp_path: Path) -> None:
 
     points = build_point_table(runs)
     scored = points.filter(pl.col("study_id").is_in(cohort.latest_two)).with_columns(
-        pl.lit("glumind").alias("model_name"),
+        pl.lit("kronos").alias("model_name"),
         (pl.col("real_mgdl") + 1.0).alias("model_predicted_mgdl"),
     )
     assert scored.height > 0
@@ -128,8 +128,8 @@ def test_native_csv_roundtrip_and_milestone_page(tmp_path: Path) -> None:
         runs,
         scored,
         ai_csv,
-        model_name="glumind",
-        evaluation_mode=EVALUATION_MODE_POST_FACTUM,
+        model_name="kronos",
+        evaluation_mode=EVALUATION_MODE_IN_PLACE,
     )
     stored = pl.read_csv(ai_csv, infer_schema_length=0)
     assert set(stored["study_id"].to_list()) == set(cohort.latest_two)
@@ -158,7 +158,7 @@ def test_native_csv_roundtrip_and_milestone_page(tmp_path: Path) -> None:
     )
     assert bundle.n_people == 4
     assert bundle.n_with_ai == 2
-    assert bundle.primary_model == "glumind"
+    assert bundle.primary_model == "kronos"
     assert bundle.html_path.is_file()
     text = bundle.html_path.read_text(encoding="utf-8")
     assert "milestone AI" in text
