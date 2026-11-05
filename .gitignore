@@ -24,6 +24,7 @@ output/reports/*
 output/figures/*
 !output/figures/.gitkeep
 output/real_preview/
+output/milestone_ai/
 data/processed/*
 !data/processed/.gitkeep
 logs/*

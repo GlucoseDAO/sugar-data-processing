@@ -11,7 +11,19 @@ from eliot import start_action
 
 from sugar_data_processing.ai.cache import score_cache_path
 from sugar_data_processing.ai.ingest import ModelComparison, ingest_model_predictions
+from sugar_data_processing.ai.native import (
+    PREDICTION_SCHEMA,
+    merge_model_predictions,
+    native_ai_csv_beside,
+    predictions_from_native_ai,
+)
 from sugar_data_processing.ai.overlay import h6_human_vs_models, overlay_model_mae
+from sugar_data_processing.ai.player_models import (
+    attach_player_models,
+    player_model_table,
+    predictions_for_display,
+    write_player_models,
+)
 from sugar_data_processing.ai.score import pick_primary_model, score_windows
 from sugar_data_processing.ai.sequences import build_point_table
 from sugar_data_processing.ai.traces import build_round_traces
@@ -31,6 +43,7 @@ class ScoringResult:
     ai_suite: HypothesisSuite
     h6: dict[str, Any]
     traces: list[dict[str, Any]]
+    player_models: pl.DataFrame
 
 
 def run_post_factum_scoring(
@@ -58,28 +71,31 @@ def run_post_factum_scoring(
             ml_ready_path=dest / "ml_ready.csv",
             cache_path=score_cache_path(),
         )
+        native_path = native_ai_csv_beside(source_csv)
+        native = (
+            predictions_from_native_ai(native_path)
+            if native_path is not None
+            else pl.DataFrame(schema=PREDICTION_SCHEMA)
+        )
+        predictions = merge_model_predictions(predictions, native)
+        predictions = predictions_for_display(predictions, runs)
         predictions.write_csv(dest / "model_predictions.csv")
+        models = player_model_table(runs, predictions)
+        write_player_models(models, dest / "player_models.csv")
         if predictions.height:
             scored, comparison = ingest_model_predictions(points, predictions)
         else:
             scored, comparison = ingest_model_predictions(
                 points,
-                pl.DataFrame(
-                    schema={
-                        "study_id": pl.Utf8,
-                        "run_id": pl.Utf8,
-                        "round_number": pl.Int64,
-                        "point_index": pl.Int64,
-                        "model_name": pl.Utf8,
-                        "model_predicted_mgdl": pl.Float64,
-                        "evaluation_mode": pl.Utf8,
-                    }
-                ),
+                pl.DataFrame(schema=PREDICTION_SCHEMA),
             )
         if scored.height:
             scored.write_csv(dest / "model_scores.csv")
         primary = pick_primary_model(predictions)
-        ai_people = overlay_model_mae(participants, scored, primary) if scored.height else participants
+        ai_people = (
+            overlay_model_mae(participants, scored, primary) if scored.height else participants
+        )
+        ai_people = attach_player_models(ai_people, models)
         ai_suite = run_all_hypotheses(ai_people)
         h6 = h6_human_vs_models(participants, scored)
         traces = build_round_traces(windows, scored)
@@ -99,4 +115,5 @@ def run_post_factum_scoring(
             ai_suite=ai_suite,
             h6=h6,
             traces=traces,
+            player_models=models,
         )

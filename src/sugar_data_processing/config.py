@@ -53,7 +53,8 @@ TRAIT_LABELS: dict[str, str] = {
 # Challenge the unknown: player opted into the opposite-corpus mix (formats A/C)
 CHALLENGE_UNKNOWN_LABEL: str = "Challenge the unknown"
 
-# AI evaluation timing. Current study games are scored after the fact.
+# AI evaluation timing. Post-factum replays saved games. In-place is the
+# forecast the app recorded during the game (prediction_statistics_ai.csv).
 EVALUATION_MODE_POST_FACTUM: str = "post_factum"
 EVALUATION_MODE_IN_PLACE: str = "in_place"
 EVALUATION_MODE_LABELS: dict[str, str] = {
@@ -66,6 +67,9 @@ REPORT_MD: str = "analysis_report.md"
 REPORT_JSON: str = "analysis_report.json"
 EXPLORER_HTML: str = "explorer.html"
 MILESTONE_HTML: str = "milestone.html"
+MILESTONE_AI_HTML: str = "milestone_ai.html"
+MILESTONE_AI_JSON: str = "milestone_ai.json"
+MILESTONE_AI_COHORT_SIZE: int = 63
 STALE_REPORT_FILES: tuple[str, ...] = (
     "human_analysis_report.md",
     "human_analysis_report.json",
@@ -218,6 +222,8 @@ def find_citras_bundle(
 
 
 DEFAULT_RAW_CSV: Path = REPO_ROOT / "data" / "raw" / "prediction_statistics.csv"
+NATIVE_AI_CSV_NAME: str = "prediction_statistics_ai.csv"
+DEFAULT_NATIVE_AI_CSV: Path = REPO_ROOT / "data" / "raw" / NATIVE_AI_CSV_NAME
 # Verifier copy of the statistics export. Still health data; gitignored like data/raw.
 DEFAULT_ANONYMIZED_DIR: Path = REPO_ROOT / "data" / "anonymized_raw"
 DEFAULT_ANONYMIZED_CSV: Path = DEFAULT_ANONYMIZED_DIR / "prediction_statistics.csv"
@@ -233,3 +239,4 @@ DEFAULT_PROCESSED_DIR: Path = REPO_ROOT / "data" / "processed"
 DEFAULT_AI_DIR: Path = DEFAULT_PROCESSED_DIR / "ai"
 # Model forecasts kept between builds; outside the output tree, which server builds discard.
 DEFAULT_SCORE_CACHE: Path = DEFAULT_PROCESSED_DIR / "model_cache" / "forecasts.parquet"
+DEFAULT_MILESTONE_AI_DIR: Path = DEFAULT_OUTPUT_DIR / "milestone_ai"

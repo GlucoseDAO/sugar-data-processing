@@ -139,10 +139,7 @@ def _layer_result_block(title: str, result: dict[str, Any] | None) -> str:
         f"- Significant?: {sig_txt}\n"
     )
     if isinstance(result.get("effect_size"), (int, float)):
-        body += (
-            f"- Effect size ({result.get('effect_size_name')}): "
-            f"{result['effect_size']:.3f}\n"
-        )
+        body += f"- Effect size ({result.get('effect_size_name')}): {result['effect_size']:.3f}\n"
     if isinstance(result.get("coefficient"), (int, float)):
         body += f"- Correlation: {result['coefficient']:.3f}\n"
     interpretation = result.get("interpretation")
@@ -194,15 +191,13 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
                 + "\n"
             )
         return header + (
-            "**Status:** no model scores on reconstructed windows yet. "
-            "The pipeline rebuilds the 3-hour game slice, converts it to the "
+            "**Status:** no model scores paired to these played rounds yet. "
+            "The pipeline lines up the 3-hour game slice, converts it to the "
             "glucose-forecasting CSV layout, and scores persistence / linear "
             "(plus SugarOne when that sibling checkout is present).\n"
         )
     if result is None:
-        return header + (
-            "**Result:** not run (usually because too few eligible participants).\n"
-        )
+        return header + ("**Result:** not run (usually because too few eligible participants).\n")
 
     if isinstance(result.get("by_category"), list):
         parts = [header, _category_prediction_table(result["by_category"]), "\n"]
@@ -233,10 +228,7 @@ def explain_hypothesis_result(key: str, result: dict[str, Any] | None) -> str:
         f"- Significant?: {sig_txt}\n"
     )
     if isinstance(result.get("effect_size"), (int, float)):
-        body += (
-            f"- Effect size ({result.get('effect_size_name')}): "
-            f"{result['effect_size']:.3f}\n"
-        )
+        body += f"- Effect size ({result.get('effect_size_name')}): {result['effect_size']:.3f}\n"
     interpretation = result.get("interpretation")
     if interpretation:
         body += f"\n**Plain-language takeaway:** {interpretation}\n"
@@ -332,8 +324,35 @@ def explain_edition_and_ai_path() -> str:
         "2. **Convert / score** — rebuild the 36-point window, write "
         "`ml_ready.csv`, score persistence, linear trend and whichever of GlucoseDAO's trained "
         "models are available (CitricSugar, Kronsugar, SugarOne, Sugarstral).\n"
-        "3. **Compare** — H6 is the paired human-vs-model test on those windows "
-        "(evaluation mode: **post factum**; in-place live-game scores are not collected yet)."
+        "3. **Compare** — H6 is the paired human-vs-model test on those windows. "
+        "Post-factum replays are always scored here. When "
+        "`prediction_statistics_ai.csv` sits next to the human export, those "
+        "in-game forecasts are ingested too (`in_place`) and become the primary model."
+    )
+
+
+def explain_population_with_recent_ai(*, n_people: int) -> str:
+    return (
+        f"Human results (cohort, H1–H5, literature, verification) use all "
+        f"**{n_people}** participants.\n\n"
+        "The AI comparison, H6, and the People-tab lines use the most recent "
+        "participants, including the two latest. A round is paired when the "
+        "human and that model both forecast it. Players from the latest day "
+        "are Kronos only. Earlier players keep every model scored on their "
+        "rounds. Participants with no model stay on the Human tab."
+    )
+
+
+def explain_milestone_ai_page(*, n_people: int, n_with_ai: int, origin: str) -> str:
+    return (
+        f"This file is the **milestone AI** explorer: the **{n_people}** most recent "
+        f"participants. The AI comparison (same person, same task, and the People "
+        f"tab forecast lines) covers **{n_with_ai}** of them. The two most recent "
+        "players are in that AI set. Everyone else on the page is human-only.\n\n"
+        f"AI source: {origin}.\n\n"
+        "Keep `prediction_statistics.csv` and `prediction_statistics_ai.csv` in "
+        "the same folder and run them together: "
+        "`uv run sdp analyze --csv <that-folder>/prediction_statistics.csv`."
     )
 
 

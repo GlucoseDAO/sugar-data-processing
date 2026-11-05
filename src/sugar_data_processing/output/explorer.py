@@ -56,6 +56,8 @@ def write_explorer_html(
     primary_model: str = "",
     h6: dict[str, Any] | None = None,
     milestone: bool = False,
+    title: str | None = None,
+    edition_note: str | None = None,
 ) -> Path:
     """Write a filterable dashboard that also embeds the analysis-report results."""
     with start_action(action_type="output.write_explorer_html") as action:
@@ -77,6 +79,8 @@ def write_explorer_html(
             primary_model=primary_model,
             h6=h6,
             milestone=milestone,
+            title=title,
+            edition_note=edition_note,
         )
         html_text = (
             _HTML_TEMPLATE.replace("__LOGO_URI__", _logo_data_uri())
@@ -225,6 +229,7 @@ def _player_rows(participants: pl.DataFrame) -> list[dict[str, Any]]:
                 "mae_own": row.get("mae_own"),
                 "mae_same": row.get("mae_same_trait"),
                 "mae_opposite": row.get("mae_opposite_trait"),
+                "models": str(row.get("models") or ""),
                 "mae_a": row.get("mae_format_a"),
                 "mae_b": row.get("mae_format_b"),
                 "mae_c": row.get("mae_format_c"),
@@ -264,6 +269,8 @@ def _explorer_payload(
     primary_model: str,
     h6: dict[str, Any] | None,
     milestone: bool = False,
+    title: str | None = None,
+    edition_note: str | None = None,
 ) -> dict[str, Any]:
     opposite = opposite_trait_summary(participants)
     suite_dict = _as_dict(suite) or {}
@@ -280,7 +287,8 @@ def _explorer_payload(
     return {
         "edition": "milestone" if milestone else edition,
         "milestone": milestone,
-        "title": "Sugar-Sugar: human participants" if milestone else "Sugar-Sugar study",
+        "title": title
+        or ("Sugar-Sugar: human participants" if milestone else "Sugar-Sugar study"),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "source_csv": str(source_csv),
         "n_players": participants.height,
@@ -294,7 +302,9 @@ def _explorer_payload(
             markdown_fragment_to_html(explain_milestone_reading() if milestone else how_to_read_report())
         ),
         "edition_html": markdown_fragment_to_html(
-            explain_milestone_page() if milestone else explain_edition_and_ai_path()
+            edition_note
+            if edition_note is not None
+            else (explain_milestone_page() if milestone else explain_edition_and_ai_path())
         ),
         "opposite_html": markdown_fragment_to_html(explain_opposite_trait(opposite)),
         "opposite": opposite,
@@ -316,13 +326,26 @@ def _explorer_payload(
         "primary_model": "" if milestone else primary_model,
         "h6": {} if milestone else (h6 or {}),
         "traces": compact_traces,
-        "line_styles": LINE_STYLES,
+        "line_styles": _line_styles(traces),
         "duration_caps": {
             "diabetes_duration_months": MAX_PLAUSIBLE_DIABETES_YEARS * 12.0,
             "cgm_duration_years": MAX_PLAUSIBLE_CGM_YEARS,
             "cgm_duration_months": MAX_PLAUSIBLE_CGM_YEARS * 12.0,
         },
     }
+
+
+def _line_styles(traces: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    styles = dict(LINE_STYLES)
+    for item in traces:
+        for name in (item.get("models") or {}):
+            if name not in styles:
+                styles[str(name)] = {
+                    "color": "#0f766e",
+                    "dash": "longdash",
+                    "label": f"AI {name}",
+                }
+    return styles
 
 
 def _compact_trace(item: dict[str, Any], diabetic_by_id: dict[str, Any]) -> dict[str, Any]:
@@ -1120,6 +1143,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
                   <th data-key="mae_own">own</th>
                   <th data-key="mae_same">same group</th>
                   <th data-key="mae_opposite">other group</th>
+                  <th data-key="models">models</th>
                 </tr>
               </thead>
               <tbody id="rows"></tbody>
@@ -1168,7 +1192,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       </section>
       <section>
         <h2>How errors grow over the hidden hour</h2>
-        <p class="prose">The black line at 0% is the real CGM value. Each shaded band shows how far forecasts landed above (+) or below (−) it, minute by minute: the band's edges are the most extreme rounds and the thicker line inside is the median. Narrower bands closer to 0% are better. Each model gets its own row of three panels (tasks A, B, C). Untick a model to hide its row.</p>
+        <p class="prose">The black line at 0% is the real CGM value. Each shaded band shows how far forecasts landed above (+) or below (−) it, minute by minute: the band's edges are the most extreme rounds and the thicker line inside is the median. Narrower bands closer to 0% are better. Each model gets its own row of three panels (tasks A, B, C). The count under a model is paired rounds — the player and that model both forecast that played round — so the totals are not one shared number. Untick a model to hide its row.</p>
         <div class="legend-grid" id="aiDevModels"></div>
         <div class="legend-grid" id="aiDevLegend"></div>
         <div id="aiDevHost"></div>
@@ -1178,7 +1202,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div id="tab-people" class="tab-panel">
       <section>
         <h2>One player at a time</h2>
-        <p class="prose">Every reconstructed round for one player (up to 12). The thick dark line is the real CGM; everything right of the dotted "forecast starts" line was hidden from the player. Blue is the player's drawing; other colours are the algorithms. Untick a line in the legend to hide it from every chart on this tab. Use Previous / Next or the arrow keys to move between players.</p>
+        <p class="prose">Every played round for one player (up to 12). Only the models that player ran are drawn. The thick dark line is the real CGM; everything right of the dotted "forecast starts" line was hidden from the player. Blue is the player's drawing; other colours are that player's algorithms. Untick a line in the legend to hide it from every chart on this tab. Use Previous / Next or the arrow keys to move between players.</p>
         <div class="legend-grid" id="lineLegend"></div>
         <div id="missingModel" class="missing-model" hidden></div>
         <div class="people-toolbar">
@@ -1186,7 +1210,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="people-caption" id="personCaption">No player selected</div>
           <button type="button" id="nextPerson">Next →</button>
         </div>
-        <div id="traceEmpty" class="empty" hidden>No reconstructed 3-hour windows for this filter. Own-data rounds need the saved upload; public rounds need the corpus file.</div>
+        <div id="traceEmpty" class="empty" hidden>No played rounds in this filter. Own-data rounds need the saved upload; public rounds need the corpus file.</div>
         <div class="trace-grid" id="traceGrid"></div>
         <h3>This player's errors over the hidden hour</h3>
         <p class="prose">0% is the real value. One shaded band per forecaster (the player in blue, then each model): edges are the extreme rounds, the inner line the median.</p>
@@ -1253,7 +1277,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       kronlstm: "triangle",
       timestral: "crossRot",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "sugar_one", "citras_w38_2", "kronlstm", "timestral"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "sugar_one", "citras_w38_2", "kronlstm", "kronos", "timestral"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
@@ -1284,6 +1308,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     };
 
     document.getElementById("pageTitle").textContent = DATA.title;
+    document.title = DATA.title;
     document.getElementById("editionBadge").textContent = DATA.milestone
       ? "Milestone · human participants only"
       : "Live study dashboard · updated " + DATA.generated_at;
@@ -1299,7 +1324,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       aiPrimaryNote.textContent =
         DATA.primary_model
           ? ("Primary model: " + modelLabel(DATA.primary_model) + ". Each dot is one player on one task.")
-          : "No model scores yet: the game windows could not be reconstructed.";
+          : "No primary model yet.";
     }
 
     const cohortSelect = document.getElementById("cohortFilter");
@@ -1856,7 +1881,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       if (!el) return;
       const c = DATA.comparison;
       if (!c || !c.n_points) {
-        el.innerHTML = `<p>No model scores on reconstructed windows yet. Sequences live in <code>${DATA.sequences_dir || "data/processed/ai"}</code>. Models only see the 24 visible points of the 3-hour game slice.</p>`;
+        el.innerHTML = `<p>No model scores paired to these played rounds yet. Sequences live in <code>${DATA.sequences_dir || "data/processed/ai"}</code>. Models only see the 24 visible points of the 3-hour game slice.</p>`;
         return;
       }
       const pooled = Object.entries(c.model_mean_mae || {}).sort((a, b) => a[1] - b[1]);
@@ -1980,7 +2005,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       grid.innerHTML = "";
       if (!ids.length) {
         empty.hidden = false;
-        caption.textContent = "No reconstructed windows";
+        caption.textContent = "No played rounds";
         prev.disabled = true;
         next.disabled = true;
         renderPersonDeviations([]);
@@ -1992,7 +2017,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const studyId = ids[personIndex];
       const player = (DATA.players || []).find((p) => playerMatches(studyId, p));
       const rounds = tracesForPerson(studyId).slice(0, MAX_ROUNDS);
-      caption.textContent = `${personIndex + 1} / ${ids.length} · ${(player && player.study_id) || studyId.slice(0, 12)} · ${(player && player.cohort_label) || ""} · ${rounds.length} round${rounds.length === 1 ? "" : "s"}`;
+      const modelLabel = (player && player.models) || modelKeys(rounds[0] || {}).join(", ");
+      caption.textContent = `${personIndex + 1} / ${ids.length} · ${(player && player.study_id) || studyId.slice(0, 12)} · ${(player && player.cohort_label) || ""} · ${rounds.length} round${rounds.length === 1 ? "" : "s"}${modelLabel ? " · " + modelLabel : ""}`;
       prev.disabled = ids.length < 2;
       next.disabled = ids.length < 2;
       document.querySelectorAll("#rows tr").forEach((tr) => {
@@ -2205,6 +2231,16 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
     }
 
+    function hasForecast(series) {
+      return Array.isArray(series) && series.some((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
+    }
+
+    function isPaired(trace, model) {
+      if (!hasForecast(trace.human)) return false;
+      if (model === "human_only") return true;
+      return hasForecast((trace.models || {})[model]);
+    }
+
     function renderAiDeviations(humanRows) {
       const host = document.getElementById("aiDevHost");
       const legend = document.getElementById("aiDevLegend");
@@ -2243,10 +2279,11 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         const title = model === "human_only"
           ? "People only (no model scored)"
           : (((DATA.line_styles || {})[model] || {}).label || model);
+        const paired = traces.filter((trace) => isPaired(trace, model));
         return `
           <div class="dev-model">
             <h3>${title}</h3>
-            <p class="note">${traces.filter((t) => (t.models || {})[model] || model === "human_only").length} reconstructed rounds in the current filter.</p>
+            <p class="note">${paired.length} paired rounds</p>
             <div class="dev-row">
               ${DEV_FORMATS.map((fmt) => `
                 <div class="dev-panel">
@@ -2259,8 +2296,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         `;
       }).join("");
       modelBlocks.forEach((model) => {
+        const paired = traces.filter((trace) => isPaired(trace, model));
         DEV_FORMATS.forEach((fmt) => {
-          const subset = traces.filter((trace) => formatKey(trace.format) === fmt.key);
+          const subset = paired.filter((trace) => formatKey(trace.format) === fmt.key);
           const humanByCohort = {};
           const aiByCohort = {};
           subset.forEach((trace) => {
@@ -2415,6 +2453,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
           <td>${fmt(p.mae_own)}</td>
           <td>${fmt(p.mae_same)}</td>
           <td>${fmt(p.mae_opposite)}</td>
+          <td>${p.models || ""}</td>
         </tr>
       `).join("");
     }
@@ -2429,7 +2468,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="stat"><b>${rows.filter((p) => p.opposite_trait).length}</b><span>predicted the other group</span></div>
         <div class="stat"><b>${fmt(mean(rows.map((p) => num(p.mae_primary))))}</b><span>mean player MAE, mg/dL</span></div>
         <div class="stat"><b>${betterOwn}/${allFormats.length || 0}</b><span>better on own data (played A, B and C)</span></div>
-        <div class="stat"><b>${(DATA.traces || []).length}</b><span>rounds replayed for AI</span></div>
+        <div class="stat"><b>${(DATA.traces || []).length}</b><span>played rounds</span></div>
       `;
       // The two tiles answer different questions: the checkbox, and the traces a player was shown.
       const otherOnly = rows.filter((p) => p.opposite_trait && !p.challenge_unknown);

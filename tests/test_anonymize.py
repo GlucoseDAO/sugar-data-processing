@@ -66,7 +66,9 @@ def test_same_person_keeps_one_alias_and_colliding_initials_are_numbered(tmp_pat
     assert amy_emails == {"email2@gmail.com"}
     assert other_emails == {"email3@gmail.com"}
 
-    ada_names = set(out.filter(pl.col("study_id").is_in([ada_a, ada_b]))["paper_full_name"].to_list())
+    ada_names = set(
+        out.filter(pl.col("study_id").is_in([ada_a, ada_b]))["paper_full_name"].to_list()
+    )
     amy_names = set(out.filter(pl.col("study_id") == amy)["paper_full_name"].to_list())
     other_names = set(out.filter(pl.col("study_id") == other)["paper_full_name"].to_list())
     assert ada_names == {"AL"}
@@ -89,6 +91,28 @@ def test_same_person_keeps_one_alias_and_colliding_initials_are_numbered(tmp_pat
     }
     assert personal_labels <= {"AL.csv", "AL2.csv", "P.csv"}
     _assert_same_analysis(src, dest)
+
+
+def test_anonymize_writes_the_ai_companion_into_the_same_folder(tmp_path: Path) -> None:
+    src = tmp_path / "in" / "prediction_statistics.csv"
+    src.parent.mkdir()
+    write_synthetic_csv(src, n_participants=3, seed=5)
+    companion = src.with_name("prediction_statistics_ai.csv")
+    companion.write_text(
+        "study_id,run_id,email,location,model_repo,predicted_values_AI\n"
+        "s1,r1,ada@example.com,Berlin,glumind,"
+        "\"[{'version': 'A', 'round': 1, 'value': 100.0}]\"\n",
+        encoding="utf-8",
+    )
+    dest = tmp_path / "out" / "prediction_statistics.csv"
+    result = anonymize_statistics_csv(src, dest)
+    assert result.ai_dest == dest.with_name("prediction_statistics_ai.csv")
+    assert result.ai_dest is not None and result.ai_dest.is_file()
+    ai = pl.read_csv(result.ai_dest, infer_schema_length=0)
+    assert "ada@example.com" not in result.ai_dest.read_text(encoding="utf-8")
+    assert "Berlin" not in result.ai_dest.read_text(encoding="utf-8")
+    assert ai["email"][0].startswith("email")
+    assert dest.exists()
 
 
 def test_real_export_round_trip_keeps_hypotheses(tmp_path: Path) -> None:

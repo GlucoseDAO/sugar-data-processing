@@ -16,6 +16,7 @@ from eliot import start_action
 from sugar_data_processing.config import (
     DEFAULT_RAW_CSV,
     DEFAULT_SIBLING_STATS,
+    NATIVE_AI_CSV_NAME,
     REPO_ROOT,
 )
 from sugar_data_processing.gathering.load import ARCHIVE_GLOB
@@ -32,6 +33,8 @@ class FetchResult:
     columns: list[str]
     scrubbed: list[str]
     archives: list[Path] = field(default_factory=list)
+    native_ai: Path | None = None
+    native_ai_rows: int = 0
 
 
 def load_repo_dotenv(path: Path | None = None) -> Path | None:
@@ -55,19 +58,14 @@ def split_remote(spec: str) -> tuple[str, str]:
     """Split ``user@host:/abs/path`` (or ``host:/abs/path``) into host and file path."""
     text = spec.strip()
     if ":" not in text:
-        raise ValueError(
-            "Remote must be host:/path or user@host:/path "
-            f"(got {spec!r})"
-        )
+        raise ValueError(f"Remote must be host:/path or user@host:/path (got {spec!r})")
     host, path = text.split(":", 1)
     host = host.strip()
     path = path.strip()
     if not host or not path:
         raise ValueError(f"Remote must be host:/path (got {spec!r})")
     if host.endswith("\\") or (len(host) == 1 and host.isalpha()):
-        raise ValueError(
-            f"Looks like a local Windows path, not an SSH remote: {spec!r}"
-        )
+        raise ValueError(f"Looks like a local Windows path, not an SSH remote: {spec!r}")
     if not path.lower().endswith(".csv"):
         path = path.rstrip("/") + "/prediction_statistics.csv"
     return host, path
@@ -118,7 +116,15 @@ def scrub_statistics_csv(src: Path, dest: Path, *, keep_contact: bool = False) -
     return blanked
 
 
-def _scp_file(host: str, remote_path: str, dest: Path, *, identity: Path | None, batch: bool) -> None:
+def _scp_file(
+    host: str,
+    remote_path: str,
+    dest: Path,
+    *,
+    identity: Path | None,
+    batch: bool,
+    missing_ok: bool = False,
+) -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial = dest.with_name(dest.name + ".partial")
     if partial.exists():
@@ -129,16 +135,35 @@ def _scp_file(host: str, remote_path: str, dest: Path, *, identity: Path | None,
     if identity is not None:
         cmd.extend(["-i", str(identity)])
     cmd.extend([f"{host}:{remote_path}", str(partial)])
-    completed = subprocess.run(cmd, check=False)
+    completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if completed.returncode != 0 or not partial.is_file():
         if partial.exists():
             partial.unlink()
+        err = f"{completed.stderr or ''}{completed.stdout or ''}"
+        if missing_ok and _remote_file_missing(err):
+            return False
         raise RuntimeError(
             f"scp failed ({completed.returncode}) for {host}:{remote_path}. "
             "Check SSH access, then retry. Use --ask-pass if this host needs a password."
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
     partial.replace(dest)
+    return True
+
+
+def companion_remote_path(remote_csv: str) -> str:
+    """Same directory as the human CSV, file name ``prediction_statistics_ai.csv``."""
+    parent, sep, _name = remote_csv.rpartition("/")
+    if not sep:
+        parent, sep, _name = remote_csv.rpartition("\\")
+    if not sep:
+        return NATIVE_AI_CSV_NAME
+    return f"{parent}{sep}{NATIVE_AI_CSV_NAME}"
+
+
+def _remote_file_missing(err: str) -> bool:
+    text = err.lower()
+    return "no such file" in text or "not a regular file" in text
 
 
 def fetch_statistics(
@@ -160,12 +185,15 @@ def fetch_statistics(
         if incoming.exists():
             incoming.unlink()
 
+        companion_local: Path | None = None
+        companion_remote: tuple[str, str] | None = None
         try:
             if source is not None:
                 src_path = source.expanduser().resolve()
                 if not src_path.is_file():
                     raise FileNotFoundError(f"Local source CSV not found: {src_path}")
                 label = str(src_path)
+                companion_local = src_path.with_name(NATIVE_AI_CSV_NAME)
                 shutil.copy2(src_path, incoming)
                 archive_sources = sorted(src_path.parent.glob(ARCHIVE_GLOB))
             elif sibling:
@@ -176,6 +204,7 @@ def fetch_statistics(
                         "That path is only a local sugar-sugar checkout, not the live server."
                     )
                 label = str(src_path)
+                companion_local = src_path.with_name(NATIVE_AI_CSV_NAME)
                 shutil.copy2(src_path, incoming)
                 archive_sources = sorted(src_path.parent.glob(ARCHIVE_GLOB))
             else:
@@ -187,6 +216,7 @@ def fetch_statistics(
                     )
                 host, remote_path = split_remote(spec)
                 label = f"{host}:{remote_path}"
+                companion_remote = (host, companion_remote_path(remote_path))
                 _scp_file(host, remote_path, incoming, identity=identity, batch=batch)
                 archive_sources = []
 
@@ -202,6 +232,14 @@ def fetch_statistics(
         finally:
             incoming.unlink(missing_ok=True)
 
+        native_ai, native_ai_rows = _fetch_native_companion(
+            dest.with_name(NATIVE_AI_CSV_NAME),
+            local=companion_local,
+            remote=companion_remote,
+            identity=identity,
+            batch=batch,
+            keep_contact=keep_contact,
+        )
         stored = pl.read_csv(dest, infer_schema_length=0)
         n_participants = 0
         if "study_id" in stored.columns:
@@ -214,6 +252,8 @@ def fetch_statistics(
             scrubbed=blanked,
             has_round_context="round_context" in stored.columns,
             archives=[str(path) for path in archives],
+            native_ai=str(native_ai) if native_ai is not None else "",
+            native_ai_rows=native_ai_rows,
         )
         return FetchResult(
             dest=dest,
@@ -223,6 +263,8 @@ def fetch_statistics(
             columns=list(stored.columns),
             scrubbed=blanked,
             archives=archives,
+            native_ai=native_ai,
+            native_ai_rows=native_ai_rows,
         )
 
 
@@ -257,3 +299,46 @@ def _fetch_remote_archives(
             _scrub_archive(path, dest, keep_contact=keep_contact)
             for path in sorted(Path(staging).glob(ARCHIVE_GLOB))
         ]
+
+
+def _fetch_native_companion(
+    dest: Path,
+    *,
+    local: Path | None,
+    remote: tuple[str, str] | None,
+    identity: Path | None,
+    batch: bool,
+    keep_contact: bool,
+) -> tuple[Path | None, int]:
+    """Copy ``prediction_statistics_ai.csv`` when the source has one.
+
+    A missing remote file is normal until the app has written in-game forecasts.
+    Any other transfer failure is raised.
+    """
+    download = dest.with_name(dest.name + ".download")
+    if download.exists():
+        download.unlink()
+    try:
+        if remote is not None:
+            host, remote_path = remote
+            found = _scp_file(
+                host,
+                remote_path,
+                download,
+                identity=identity,
+                batch=batch,
+                missing_ok=True,
+            )
+            if not found:
+                dest.unlink(missing_ok=True)
+                return None, 0
+        elif local is not None and local.is_file():
+            shutil.copy2(local, download)
+        else:
+            dest.unlink(missing_ok=True)
+            return None, 0
+        scrub_statistics_csv(download, dest, keep_contact=keep_contact)
+    finally:
+        download.unlink(missing_ok=True)
+    stored = pl.read_csv(dest, infer_schema_length=0)
+    return dest, stored.height

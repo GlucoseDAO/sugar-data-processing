@@ -185,6 +185,8 @@ Re-run H1–H5 on the last pulled CSV (no SSH):
 uv run sdp analyze
 ```
 
+`fetch` also looks for `prediction_statistics_ai.csv` in the same directory as the human file. Keep those two files together and run them as a pair: `analyze` reads the human path you pass, then loads `prediction_statistics_ai.csv` from that same folder. In-game rows become `in_place` and that model is the primary AI comparison. A missing companion is a note; post-factum scoring still runs.
+
 ### What is extracted from the server
 
 `uv run sdp fetch` copies one file, `prediction_statistics.csv`, and writes it to `data/raw/prediction_statistics.csv`. Consent records, the email-to-study-id map, and the CGM files participants uploaded stay on the server.
@@ -213,20 +215,27 @@ The upload filename is the piece that can still identify someone: it can be a pe
 
 ### How to run with an anonymized file
 
-Give evaluators `data/anonymized_raw/prediction_statistics.csv`, together with this repo. That CSV is the input the HTML is rebuilt from.
+Give evaluators this repo plus the anonymized CSVs. `study_id` is unchanged, so the HTML is the same analysis. They put both files in one folder:
 
-They store it at:
+```
+data/anonymized_raw/prediction_statistics.csv
+data/anonymized_raw/prediction_statistics_ai.csv
+```
 
-`data/anonymized_raw/prediction_statistics.csv`
+Then:
 
 ```bash
 uv sync
 uv run sdp analyze --csv data/anonymized_raw/prediction_statistics.csv
 ```
 
-Pass `--csv`. A plain `uv run sdp analyze` reads `data/raw/prediction_statistics.csv` when that file exists. Reports land in `output/reports/`; `milestone.html` is the human page. See [Where the numbers are](#where-the-numbers-are).
+`analyze` reads the human file you pass and the AI file sitting next to it. Do not run the two CSVs as separate commands.
 
-Build the file you send (from the last fetch):
+Someone who already has the anonymized human file can drop a later `prediction_statistics_ai.csv` in that same folder and re-run the same `analyze --csv` line. The join is `study_id` / `run_id`. Human-only HTML still builds if the AI file is missing; H1–H5 do not need it.
+
+Pass `--csv`. A plain `uv run sdp analyze` reads `data/raw/prediction_statistics.csv` when that file exists. Reports land in `output/reports/`; `explorer.html` is the full page, `milestone.html` is the human page. See [Where the numbers are](#where-the-numbers-are).
+
+Build the files you send (from the last fetch). The AI companion is copied when it sits next to the raw human CSV:
 
 ```bash
 uv run sdp anonymize
@@ -287,7 +296,17 @@ After a model writes predictions (join keys `study_id, run_id, round_number, poi
 uv run sdp ingest-ai --predictions path/to/model.csv
 ```
 
-`evaluation_mode` is `post_factum` today (replay saved games). `in_place` is reserved for scores collected during the live game.
+`evaluation_mode` is `post_factum` for replays of saved games. `in_place` is the forecast from `prediction_statistics_ai.csv` when the app recorded it during the game.
+
+### AI on the latest participants (gitignored)
+
+Human H1–H5 use the whole export. Model scoring, H6, and the People tab use the most recent participants, including the latest two. Each player is shown with only the models that scored their rounds. The latest day's players are Kronos. Earlier players keep every model scored on those rounds.
+
+```bash
+uv run sdp milestone-ai
+```
+
+The page is `output/milestone_ai/milestone_ai.html` (gitignored). It is the same explorer as the full report: Overview, Human, AI, and People. Put `prediction_statistics.csv` and `prediction_statistics_ai.csv` in the same folder and pass that human path as `--csv`. `player_models.csv` in the dest folder lists the models for each of those players. Pass `--predictions <model_predictions.csv>` to rebuild from an already scored file instead of running the models again.
 
 ### Jupyter (same library modules and same report folder)
 

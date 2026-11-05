@@ -9,6 +9,7 @@ import polars as pl
 import pytest
 
 from sugar_data_processing.fetch import (
+    companion_remote_path,
     fetch_statistics,
     load_repo_dotenv,
     resolve_identity,
@@ -29,6 +30,15 @@ def _csv_with_contact(path: Path) -> Path:
     )
     raw.write_csv(path)
     return path
+
+
+def test_companion_remote_path_replaces_filename() -> None:
+    assert companion_remote_path("box:/remote/data/input/prediction_statistics.csv").endswith(
+        "prediction_statistics_ai.csv"
+    )
+    assert "/input/prediction_statistics_ai.csv" in companion_remote_path(
+        "/remote/data/input/prediction_statistics.csv"
+    )
 
 
 def test_split_remote_appends_filename() -> None:

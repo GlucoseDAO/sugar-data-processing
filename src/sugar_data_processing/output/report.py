@@ -14,6 +14,7 @@ import polars as pl
 from eliot import start_action
 
 from sugar_data_processing.ai.export import export_prediction_sequences
+from sugar_data_processing.ai.player_models import attach_player_models
 from sugar_data_processing.ai.run import ScoringResult, run_post_factum_scoring
 from sugar_data_processing.comparison.benchmarks import BenchmarkContext, benchmark_context
 from sugar_data_processing.config import (
@@ -79,7 +80,10 @@ def write_report(
         csv_ready = participants
         if "formats_played" in csv_ready.columns:
             csv_ready = csv_ready.with_columns(
-                pl.col("formats_played").cast(pl.List(pl.Utf8)).list.join(",").alias("formats_played")
+                pl.col("formats_played")
+                .cast(pl.List(pl.Utf8))
+                .list.join(",")
+                .alias("formats_played")
             )
         csv_ready.write_csv(processed_dir / "participants.csv")
 
@@ -142,6 +146,7 @@ def write_report(
         )
         md_path.write_text(md, encoding="utf-8")
 
+        participants = attach_player_models(participants, scoring.player_models)
         explorer_path = write_explorer_html(
             participants=participants,
             runs=runs,
@@ -240,11 +245,7 @@ def _cohort_table(participants: pl.DataFrame) -> str:
         "| Category | People | What it is |",
         "| --- | ---: | --- |",
     ]
-    counts = (
-        participants.group_by("cohort_category")
-        .len()
-        .to_dicts()
-    )
+    counts = participants.group_by("cohort_category").len().to_dicts()
     by_key = {str(row["cohort_category"]): int(row["len"]) for row in counts}
     for key, label in COHORT_LABELS.items():
         if key not in by_key:
@@ -256,9 +257,7 @@ def _cohort_table(participants: pl.DataFrame) -> str:
 def _issue_table(issues: list[Anomaly], limit: int = 80) -> str:
     lines: list[str] = []
     for a in issues[:limit]:
-        lines.append(
-            f"| `{a.study_id[:12]}` | {a.category} | {a.severity} | {a.detail} |"
-        )
+        lines.append(f"| `{a.study_id[:12]}` | {a.category} | {a.severity} | {a.detail} |")
     if len(issues) > limit:
         lines.append(f"| … | … | … | ({len(issues) - limit} more omitted) |")
     return "\n".join(lines) if lines else "| — | — | — | none |"
@@ -344,19 +343,23 @@ AI **{_fmt_mae(cluster.get("ai_mean_abs_gap"))}** (smaller = more stable).
 Models were fed only the 24 visible CGM points from the game; anything before them is marked missing.
 Own-data windows come from the files players uploaded (saved under sugar-sugar `data/input/users`).
 
-{_pair(
-    "### Per-task MAE\\n\\n"
-    "Generic (A), Own (B), Mixed (C). Blue is the human, purple is the model. "
-    "Each tick is the same person on that task.",
-    img("task_mae", "Same person, same task: human vs AI MAE", ai=True),
-)}
+{
+        _pair(
+            "### Per-task MAE\\n\\n"
+            "Generic (A), Own (B), Mixed (C). Blue is the human, purple is the model. "
+            "Each tick is the same person on that task.",
+            img("task_mae", "Same person, same task: human vs AI MAE", ai=True),
+        )
+    }
 
-{_pair(
-    "### Same-user cluster\\n\\n"
-    "X = Generic (A), Y = Own (B). Grey line joins that person's human point "
-    "to their AI point. Below the diagonal = better on own data.",
-    img("same_user_cluster", "Same user on generic vs own: human and AI", ai=True),
-)}
+{
+        _pair(
+            "### Same-user cluster\\n\\n"
+            "X = Generic (A), Y = Own (B). Grey line joins that person's human point "
+            "to their AI point. Below the diagonal = better on own data.",
+            img("same_user_cluster", "Same user on generic vs own: human and AI", ai=True),
+        )
+    }
 """
 
 
@@ -416,8 +419,7 @@ def _render_markdown(
     schema_status = "PASSED" if verification.schema_ok else "FAILED"
 
     catalog_rows = "\n".join(
-        f"| {info['code']} | {info['title']} | {info['question']} |"
-        for info in HYPOTHESES.values()
+        f"| {info['code']} | {info['title']} | {info['question']} |" for info in HYPOTHESES.values()
     )
     reading_guide = how_to_read_report()
     edition_note = explain_edition_and_ai_path()
@@ -461,61 +463,88 @@ and what overall prediction accuracy looks like.
 | Raw runs (rows) | {runs.height} | Completed app sessions in the export |
 | Unique participants | {participants.height} | Distinct people (`study_id`) |
 | Repeat players | {n_repeat} | People with more than one saved run |
-| Challenge the unknown | {opposite.get("n_challenge_unknown", 0)} | Opted into the opposite-corpus mix |
-| Played opposite trait | {opposite.get("n_played_opposite_trait", 0)} | At least one round on the other diabetes class |
+| Challenge the unknown | {
+        opposite.get("n_challenge_unknown", 0)
+    } | Opted into the opposite-corpus mix |
+| Played opposite trait | {
+        opposite.get("n_played_opposite_trait", 0)
+    } | At least one round on the other diabetes class |
 | Saved runs (all people) | {n_runs_total} | Sessions after counting replays |
 | Played every variant (A+B+C) | {n_all_formats} | People who tried generic, own, and mixed |
 | Eligible for primary analyses | {n_primary} | ≥6 generic segments (used for H1–H4) |
 | Eligible for own-vs-generic test | {n_h5} | ≥6 generic **and** ≥6 own (used for H5) |
 | Mean person MAE (mg/dL) | {benchmarks.human_mean_mae:.2f} | Average accuracy (lower is better) |
-| Median person MAE (mg/dL) | {benchmarks.human_median_mae:.2f} | Typical person (robust to outliers) |
+| Median person MAE (mg/dL) | {
+        benchmarks.human_median_mae:.2f} | Typical person (robust to outliers) |
 | SD person MAE (mg/dL) | {benchmarks.human_sd_mae:.2f} | Spread of accuracy across people |
 
 {cohort_rows}
 
-{_pair(
-    "### Who is in the cohort\n\n"
-    "Each slice is a unique person in one diabetes × CGM bucket. "
-    "This is head-count, not accuracy.",
-    img("cohort_pie", "Unique people in each diabetes × CGM category"),
-)}
+{
+        _pair(
+            "### Who is in the cohort\n\n"
+            "Each slice is a unique person in one diabetes × CGM bucket. "
+            "This is head-count, not accuracy.",
+            img("cohort_pie", "Unique people in each diabetes × CGM category"),
+        )
+    }
 
-{_pair(
-    "### How accurate people were\n\n"
-    "Each tick is one person's MAE (mg/dL). Lower is better. "
-    "Look at the centre, the spread, and any far-right outliers.",
-    img("mae_distribution", "Distribution of per-person MAE (mg/dL)"),
-)}
+{
+        _pair(
+            "### How accurate people were\n\n"
+            "Each tick is one person's MAE (mg/dL). Lower is better. "
+            "Look at the centre, the spread, and any far-right outliers.",
+            img("mae_distribution", "Distribution of per-person MAE (mg/dL)"),
+        )
+    }
 
-{_pair(
-    "### Accuracy on each task\n\n"
-    "A is generic traces, B is own data, C is mixed. "
-    "One point per person who played that format.",
-    img("mae_by_format", "Person MAE on each task: A generic, B own data, C mixed"),
-)}
+{
+        _pair(
+            "### Accuracy on each task\n\n"
+            "A is generic traces, B is own data, C is mixed. "
+            "One point per person who played that format.",
+            img("mae_by_format", "Person MAE on each task: A generic, B own data, C mixed"),
+        )
+    }
 
-{_pair(
-    "### First-timers vs people who came back\n\n"
-    f"{n_repeat} of {participants.height} people saved more than one run. "
-    "The swarm is person MAE, not a count bar.",
-    img("players_vs_repeats", "How many people played once vs came back, and their MAE"),
-)}
+{
+        _pair(
+            "### First-timers vs people who came back\n\n"
+            f"{n_repeat} of {participants.height} people saved more than one run. "
+            "The swarm is person MAE, not a count bar.",
+            img("players_vs_repeats", "How many people played once vs came back, and their MAE"),
+        )
+    }
 
-{_pair(
-    "### People who tried every variant\n\n"
-    "Only players who saved A, B, and C. Below the diagonal means "
-    "better (lower MAE) on their own data than on generic traces.",
-    img("all_formats_own_vs_generic", "People who played every variant: own-data MAE vs generic MAE"),
-)}
+{
+        _pair(
+            "### People who tried every variant\n\n"
+            "Only players who saved A, B, and C. Below the diagonal means "
+            "better (lower MAE) on their own data than on generic traces.",
+            img(
+                "all_formats_own_vs_generic",
+                "People who played every variant: own-data MAE vs generic MAE",
+            ),
+        )
+    }
 
-{_pair(
-    "### Everyone in own vs generic space\n\n"
-    "Colour is the diabetes × CGM cohort. A dark ring means they opted "
-    "into Challenge the unknown. Missing own-data MAE falls back to person MAE.",
-    img("people_clusters", "People as points in own-vs-generic space (colour = cohort, ring = Challenge the unknown)"),
-)}
+{
+        _pair(
+            "### Everyone in own vs generic space\n\n"
+            "Colour is the diabetes × CGM cohort. A dark ring means they opted "
+            "into Challenge the unknown. Missing own-data MAE falls back to person MAE.",
+            img(
+                "people_clusters",
+                "People as points in own-vs-generic space (colour = cohort, ring = Challenge the unknown)",
+            ),
+        )
+    }
 
-Interactive filters live in [`{EXPLORER_HTML}`]({EXPLORER_HTML}). The milestone submission page (human participants only) is [`{MILESTONE_HTML}`]({MILESTONE_HTML}).
+Interactive filters live in [`{EXPLORER_HTML}`]({
+        EXPLORER_HTML
+    }). The milestone submission page (human participants only) is [`{MILESTONE_HTML}`]({
+        MILESTONE_HTML
+    }).
 
 ## 2. Analysis population rules (§7.2)
 
@@ -538,17 +567,26 @@ segments. Otherwise short incomplete sessions would dominate the results.
 Each result starts with the four diabetes × CGM categories, then splits
 generic data vs own data.
 
-{_hypothesis_section(
-    "h1",
-    hyp["h1"],
-    [img("mae_by_diabetes", "Person MAE by diabetes status, each group split into generic vs own data")],
-)}
+{
+        _hypothesis_section(
+            "h1",
+            hyp["h1"],
+            [
+                img(
+                    "mae_by_diabetes",
+                    "Person MAE by diabetes status, each group split into generic vs own data",
+                )
+            ],
+        )
+    }
 
-{_hypothesis_section(
-    "h2",
-    hyp["h2"],
-    [img("mae_by_cgm", "Person MAE by CGM use, each group split into generic vs own data")],
-)}
+{
+        _hypothesis_section(
+            "h2",
+            hyp["h2"],
+            [img("mae_by_cgm", "Person MAE by CGM use, each group split into generic vs own data")],
+        )
+    }
 
 ## 4. Secondary hypotheses
 
@@ -556,65 +594,75 @@ generic data vs own data.
 than on generic example data? H3 and H4 use **months** so short experience is readable.
 Both also split generic vs own MAE.
 
-{_hypothesis_section(
-    "h3",
-    hyp["h3"],
-    [
-        img(
-            "diabetes_duration_scatter",
-            "Diabetes duration (months) vs MAE on generic and own data among PwD",
+{
+        _hypothesis_section(
+            "h3",
+            hyp["h3"],
+            [
+                img(
+                    "diabetes_duration_scatter",
+                    "Diabetes duration (months) vs MAE on generic and own data among PwD",
+                )
+            ],
         )
-    ],
-)}
+    }
 
-{_hypothesis_section(
-    "h4",
-    hyp["h4"],
-    [
-        img(
-            "cgm_duration_scatter",
-            "CGM experience (months) vs MAE on generic and own data among CGM users",
-        ),
-    ],
-)}
-
-{_hypothesis_section(
-    "h5",
-    hyp["h5"],
-    [
-        img(
-            "own_vs_generic",
-            "Paired own-data MAE vs generic-data MAE (below diagonal = better on own data)",
+{
+        _hypothesis_section(
+            "h4",
+            hyp["h4"],
+            [
+                img(
+                    "cgm_duration_scatter",
+                    "CGM experience (months) vs MAE on generic and own data among CGM users",
+                ),
+            ],
         )
-    ],
-)}
+    }
+
+{
+        _hypothesis_section(
+            "h5",
+            hyp["h5"],
+            [
+                img(
+                    "own_vs_generic",
+                    "Paired own-data MAE vs generic-data MAE (below diagonal = better on own data)",
+                )
+            ],
+        )
+    }
 
 {explain_hypothesis_result("h6", (scoring.h6 if scoring is not None else hyp.get("h6")))}
 
 ## 4b. Challenge the unknown / opposite trait
 
-{_pair(
-    opposite_md,
-    img("opposite_trait", "Same-trait vs opposite-trait person MAE (points, not bins)"),
-)}
+{
+        _pair(
+            opposite_md,
+            img("opposite_trait", "Same-trait vs opposite-trait person MAE (points, not bins)"),
+        )
+    }
 
 ## 5. Literature / GlucoBench context (§7.5)
 
 **Goal of this section:** place human MAE next to published 60-minute model bands.
 This is contextual comparison, not the deferred formal H6 baseline test.
 
-{_pair(
-    (
-        f"{benchmarks.narrative}\n\n"
-        "| Band | Range (mg/dL) | % of humans inside | How to read it |\n"
-        "| --- | --- | ---: | --- |\n"
-        f"| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% | Typical simple forecasting models |\n"
-        f"| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% | Typical deep-learning reports |\n"
-        f"| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% | Personalized-model band |\n"
-        f"| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% | Better than the simple-band floor |\n"
-    ),
-    img("benchmark_bands", "Human MAE density vs published simple and deep-learning bands"),
-)}
+{
+        _pair(
+            (
+                f"{benchmarks.narrative}\n\n"
+                "| Band | Range (mg/dL) | % of humans inside | How to read it |\n"
+                "| --- | --- | ---: | --- |\n"
+                f"| Simple / ARIMA | {benchmarks.simple_baseline_mae_range[0]:.0f}–{benchmarks.simple_baseline_mae_range[1]:.0f} | {benchmarks.pct_inside_simple_baseline_band:.1f}% | Typical simple forecasting models |\n"
+                f"| Deep learning | {benchmarks.deep_learning_mae_range[0]:.0f}–{benchmarks.deep_learning_mae_range[1]:.0f} | {benchmarks.pct_inside_deep_learning_band:.1f}% | Typical deep-learning reports |\n"
+                f"| Personalized | {benchmarks.personalized_mae_range[0]:.0f}–{benchmarks.personalized_mae_range[1]:.0f} | {benchmarks.pct_inside_personalized_band:.1f}% | Personalized-model band |\n"
+                f"| Below simple-band low | < {benchmarks.simple_baseline_mae_range[0]:.0f} | {benchmarks.pct_below_simple_baseline_low:.1f}% | Better than the simple-band floor |\n"
+            ),
+            img("benchmark_bands", "Human MAE density vs published simple and deep-learning bands"),
+        )
+    }
 
 ## 6. Data verification
 

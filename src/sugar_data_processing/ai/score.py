@@ -17,6 +17,7 @@ from sugar_data_processing.ai.timestral import TIMESTRAL_MODEL_NAME, ensure_time
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
     CITRAS_MODELS,
+    EVALUATION_MODE_IN_PLACE,
     EVALUATION_MODE_POST_FACTUM,
     FORECAST_HORIZON_POINTS,
     PRIMARY_MODEL_NAME,
@@ -287,8 +288,14 @@ def _unwrap_state_dict(state: object) -> dict[str, object]:
 
 
 def pick_primary_model(predictions: pl.DataFrame) -> str:
+    """Prefer the in-game model when a native AI export was ingested."""
     if predictions.height == 0:
         return PRIMARY_MODEL_NAME
+    if "evaluation_mode" in predictions.columns:
+        live = predictions.filter(pl.col("evaluation_mode") == EVALUATION_MODE_IN_PLACE)
+        if live.height:
+            counts = live.group_by("model_name").len().sort(["len", "model_name"], descending=[True, False])
+            return str(counts["model_name"][0])
     names = set(predictions["model_name"].to_list())
     if MODEL_SUGAR_ONE in names:
         return MODEL_SUGAR_ONE

@@ -20,10 +20,12 @@ from sugar_data_processing.config import (
     DEFAULT_AI_DIR,
     DEFAULT_ANONYMIZED_CSV,
     DEFAULT_FIXTURE_CSV,
+    DEFAULT_MILESTONE_AI_DIR,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_RAW_CSV,
     DEFAULT_SIBLING_STATS,
     EVALUATION_MODE_POST_FACTUM,
+    MILESTONE_AI_COHORT_SIZE,
     REPO_ROOT,
 )
 from sugar_data_processing.comparison.benchmarks import benchmark_context
@@ -100,9 +102,7 @@ def analyze(
     elif DEFAULT_RAW_CSV.exists():
         csv_path = DEFAULT_RAW_CSV
     elif DEFAULT_FIXTURE_CSV.exists():
-        console.print(
-            f"[yellow]No raw CSV at {DEFAULT_RAW_CSV}; falling back to fixture.[/yellow]"
-        )
+        console.print(f"[yellow]No raw CSV at {DEFAULT_RAW_CSV}; falling back to fixture.[/yellow]")
         csv_path = DEFAULT_FIXTURE_CSV
     else:
         console.print(
@@ -202,9 +202,7 @@ def fetch(
                 "user@host:/path you already ssh to (do not commit .env)."
             )
             if DEFAULT_SIBLING_STATS.exists():
-                console.print(
-                    "Or pull the local checkout: [bold]uv run sdp fetch --sibling[/bold]"
-                )
+                console.print("Or pull the local checkout: [bold]uv run sdp fetch --sibling[/bold]")
         raise typer.Exit(code=1) from exc
 
     console.print(f"[green]Wrote[/green] {pulled.dest}")
@@ -222,6 +220,12 @@ def fetch(
     ]
     if extra:
         console.print(f"Current-app columns present: {', '.join(extra)}")
+    if pulled.native_ai is not None:
+        console.print(
+            f"[green]Native AI export:[/green] {pulled.native_ai} ({pulled.native_ai_rows} rows)"
+        )
+    else:
+        console.print("Native AI export: not on the source (prediction_statistics_ai.csv)")
     if then_analyze:
         _run_analyze(pulled.dest, output)
 
@@ -250,7 +254,7 @@ def anonymize(
     Names become initials, with a number when those initials collide.
     Personal upload filenames use that same label. Location is cleared.
 
-    Verifiers rebuild the page themselves::
+    Verifiers keep both CSVs in the same folder and rebuild with::
 
         uv run sdp analyze --csv data/anonymized_raw/prediction_statistics.csv
     """
@@ -260,6 +264,10 @@ def anonymize(
         raise typer.Exit(code=1)
     written = anonymize_statistics_csv(csv, dest)
     console.print(f"[green]Wrote[/green] {written.dest}")
+    if written.ai_dest is not None:
+        console.print(f"[green]Wrote[/green] {written.ai_dest}")
+    else:
+        console.print("No prediction_statistics_ai.csv next to the human file.")
     console.print(
         f"Rows: {written.n_rows} | People: {written.n_people} | "
         f"Email aliases: {written.n_email_aliases} | "
@@ -267,7 +275,7 @@ def anonymize(
         f"Personal filenames: {written.n_personal_filenames}"
     )
     console.print(
-        "Verifiers rebuild the HTML with "
+        "Keep both CSVs in the same folder. Rebuild with "
         f"[bold]uv run sdp analyze --csv {written.dest}[/bold]"
     )
 
@@ -298,15 +306,69 @@ def _resolve_csv(csv: Path | None, use_fixture: bool) -> Path:
     if DEFAULT_RAW_CSV.exists():
         return DEFAULT_RAW_CSV
     if DEFAULT_FIXTURE_CSV.exists():
-        console.print(
-            f"[yellow]No raw CSV at {DEFAULT_RAW_CSV}; falling back to fixture.[/yellow]"
-        )
+        console.print(f"[yellow]No raw CSV at {DEFAULT_RAW_CSV}; falling back to fixture.[/yellow]")
         return DEFAULT_FIXTURE_CSV
     console.print(
         "[red]No input CSV found.[/red] Pass --csv, place a file at "
         f"{DEFAULT_RAW_CSV}, or use --fixture."
     )
     raise typer.Exit(code=1)
+
+
+@app.command("milestone-ai")
+def milestone_ai(
+    csv: Optional[Path] = typer.Option(
+        None,
+        "--csv",
+        help="Full human prediction_statistics.csv. Defaults to data/raw.",
+    ),
+    dest: Path = typer.Option(
+        DEFAULT_MILESTONE_AI_DIR,
+        "--dest",
+        help="Gitignored folder for milestone_ai.html",
+    ),
+    cohort_size: int = typer.Option(
+        MILESTONE_AI_COHORT_SIZE,
+        "--n",
+        min=2,
+        help="How many of the most recent participants get the AI comparison",
+    ),
+    predictions: Optional[Path] = typer.Option(
+        None,
+        "--predictions",
+        help="Reuse a model_predictions.csv for the recent cohort instead of scoring again",
+    ),
+) -> None:
+    """Full human analysis on everyone. AI comparison only for the most recent people.
+
+    H1–H5, the cohort, and verification use the whole export. Model scoring,
+    H6, and the People-tab lines use the last ``--n`` participants.
+    """
+    from sugar_data_processing.ai.milestone import write_population_with_recent_ai
+    from sugar_data_processing.config import MILESTONE_AI_HTML
+
+    _configure_logging()
+    human = csv if csv is not None else DEFAULT_RAW_CSV
+    if not human.exists():
+        console.print(f"[red]CSV not found:[/red] {human}")
+        raise typer.Exit(code=1)
+    html = dest / MILESTONE_AI_HTML
+    try:
+        report = write_population_with_recent_ai(
+            human,
+            html,
+            cohort_size=cohort_size,
+            predictions_csv=predictions,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(f"[green]Human analysis:[/green] {report.n_people} people")
+    console.print(
+        f"AI cohort: {report.n_ai_cohort} most recent "
+        f"({report.n_with_ai} with a model score) | model {report.primary_model}"
+    )
+    console.print(f"HTML: {report.html_path}")
 
 
 @app.command("export-ai")

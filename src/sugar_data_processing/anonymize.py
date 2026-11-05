@@ -33,6 +33,7 @@ from typing import Any
 import polars as pl
 from eliot import start_action
 
+from sugar_data_processing.config import NATIVE_AI_CSV_NAME
 from sugar_data_processing.gathering.load import statistics_csv_paths
 from sugar_data_processing.gathering.sources import is_generic_corpus_name, source_basename
 
@@ -81,6 +82,7 @@ class AnonymizeResult:
     """Counts only. The real-to-alias map is not kept."""
 
     dest: Path
+    ai_dest: Path | None
     n_rows: int
     n_people: int
     n_email_aliases: int
@@ -150,13 +152,19 @@ def anonymize_statistics_csv(src: Path | str, dest: Path | str) -> AnonymizeResu
         )
         rewritten, counts = anonymize_statistics_frame(combined)
         target.parent.mkdir(parents=True, exist_ok=True)
+        written: list[Path] = []
         for i, (path, frame) in enumerate(parts):
             out = target if i == 0 else target.with_name(path.name)
             tmp = out.with_name(out.name + ".tmp")
             rewritten.filter(pl.col(_PART_COLUMN) == str(i)).select(frame.columns).write_csv(tmp)
             tmp.replace(out)
+            written.append(out)
+        ai_dest = next((path for path in written if path.name == NATIVE_AI_CSV_NAME), None)
+        if ai_dest is None:
+            ai_dest = _anonymize_companion(source, target.parent)
         result = AnonymizeResult(
             dest=target,
+            ai_dest=ai_dest,
             n_rows=rewritten.height,
             n_people=counts["n_people"],
             n_email_aliases=counts["n_email_aliases"],
@@ -166,6 +174,7 @@ def anonymize_statistics_csv(src: Path | str, dest: Path | str) -> AnonymizeResu
         action.log(
             message_type="info",
             dest=str(target),
+            ai_dest=str(ai_dest) if ai_dest is not None else "",
             n_rows=result.n_rows,
             n_people=result.n_people,
             n_email_aliases=result.n_email_aliases,
@@ -173,6 +182,20 @@ def anonymize_statistics_csv(src: Path | str, dest: Path | str) -> AnonymizeResu
             n_personal_filenames=result.n_personal_filenames,
         )
         return result
+
+
+def _anonymize_companion(human_src: Path, dest_dir: Path) -> Path | None:
+    """Write ``prediction_statistics_ai.csv`` next to the anonymized human file."""
+    companion = human_src.with_name(NATIVE_AI_CSV_NAME)
+    if not companion.is_file():
+        return None
+    frame = pl.read_csv(companion, infer_schema_length=0)
+    rewritten, _counts = anonymize_statistics_frame(frame)
+    dest = dest_dir / NATIVE_AI_CSV_NAME
+    tmp = dest.with_name(dest.name + ".tmp")
+    rewritten.write_csv(tmp)
+    tmp.replace(dest)
+    return dest
 
 
 def _people_by_study(records: list[dict[str, Any]]) -> dict[str, str]:
@@ -383,7 +406,9 @@ def _rewrite_literal(cell: str, replacements: dict[str, str]) -> str:
             if not isinstance(item, dict):
                 continue
             if str(item.get("data_source_name") or "") in replacements:
-                raise ValueError("A personal upload filename was still present after anonymization.")
+                raise ValueError(
+                    "A personal upload filename was still present after anonymization."
+                )
     return updated
 
 

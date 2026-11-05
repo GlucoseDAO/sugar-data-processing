@@ -1,10 +1,13 @@
 # Anonymized statistics export
 
-This folder holds the CSV evaluators use to rebuild the study HTML. The file is produced locally and is not committed.
+This folder is what evaluators use to rebuild the study HTML. The files are produced locally and are not committed.
 
-Store the file you were given at:
+Put both CSVs in this folder and run them together:
 
-`data/anonymized_raw/prediction_statistics.csv`
+```
+data/anonymized_raw/prediction_statistics.csv
+data/anonymized_raw/prediction_statistics_ai.csv
+```
 
 From a checkout of this repo:
 
@@ -13,9 +16,11 @@ uv sync
 uv run sdp analyze --csv data/anonymized_raw/prediction_statistics.csv
 ```
 
-Reports are written to `output/reports/`. `milestone.html` is the human page.
+`analyze` reads the human file and loads `prediction_statistics_ai.csv` from the same folder. Reports go to `output/reports/`. `explorer.html` is the full page. `milestone.html` is the human page.
 
-Regenerate the CSV from the last server pull:
+If you already have the anonymized human file, drop the AI CSV next to it and re-run the same command. `study_id` is unchanged, so the join works. The HTML still builds without the AI file; you just do not get the in-game forecasts.
+
+Regenerate the pack from the last server pull:
 
 ```bash
 uv run sdp anonymize
