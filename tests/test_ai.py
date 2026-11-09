@@ -302,10 +302,13 @@ def test_forecasting_root_reads_the_environment(tmp_path: Path, monkeypatch: pyt
 
 
 def test_sugar_one_scores_one_real_window() -> None:
+    from sugar_data_processing.ai.sugar_one_forecast import find_sugar_one_w53_bundle
+
     root = find_forecasting_root()
-    if root is None or not (root / SUGAR_ONE_RUN_DIR / "best_model.pt").exists():
-        pytest.skip(f"SugarOne is not on this machine: set {FORECASTING_ROOT_ENV} to a glucose-forecasting "
-                    f"checkout that has {SUGAR_ONE_RUN_DIR}/best_model.pt")
+    local = root is not None and (root / SUGAR_ONE_RUN_DIR / "best_model.pt").exists()
+    if find_sugar_one_w53_bundle() is None and not local:
+        pytest.skip(f"SugarOne is not on this machine: need the W5.3 ONNX bundle or {FORECASTING_ROOT_ENV} "
+                    f"pointing at a checkout that has {SUGAR_ONE_RUN_DIR}/best_model.pt")
     scored = score_windows([_sample_window()], forecasting_root=root)
     names = set(scored["model_name"].to_list())
     assert {"persistence", "linear", MODEL_SUGAR_ONE} <= names

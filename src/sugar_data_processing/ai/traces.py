@@ -59,6 +59,7 @@ LINE_STYLES: dict[str, dict[str, str]] = {
     "persistence": {"color": "#ea580c", "dash": "dotted", "label": "AI persistence"},
     "linear": {"color": "#16a34a", "dash": "dashdot", "label": "AI linear"},
     "sugar_one": {"color": "#9333ea", "dash": "longdash", "label": "AI SugarOne"},
+    "sugar_one_r28": {"color": "#0f766e", "dash": "dashdot", "label": "AI SugarOne R.28"},
     "citras_w38_2": {"color": "#0891b2", "dash": "solid", "label": "AI CitricSugar"},
     "kronlstm": {"color": "#db2777", "dash": "longdash", "label": "AI Kronsugar"},
     "kronos": {"color": "#db2777", "dash": "longdash", "label": "AI Kronsugar"},

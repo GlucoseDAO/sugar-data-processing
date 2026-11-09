@@ -28,15 +28,18 @@ Orchestration: `sugar_data_processing.pipeline.run_analysis`.
 | **H3** | Diabetes duration (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H4** | CGM experience (months) vs MAE, generic and own | Pearson / Spearman + log exploratory |
 | **H5** | Own vs generic MAE (paired) | Shapiro on diffs → paired t / Wilcoxon |
-| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / SugarOne (a glucose-forecasting checkout with `fixtures/checkpoints/sugar_one_1.0`, named by `GLUCOSE_FORECASTING_DIR` or found beside this repository) / the ONNX models below |
+| **H6** | Human vs baseline models | Same 3-hour windows; persistence / linear / SugarOne W5.3 and SugarOne R.28 (ONNX, downloaded with `HF_TOKEN`) / the other ONNX models below. A local SugarOne 1.0 checkpoint is used only when the W5.3 bundle is absent. |
 
-The dashboard uses the model names the paper will use: **SugarOne** is glucose-forecasting's
-production SugarOne 1.0 checkpoint, **CitricSugar** is CITRAS-FM W38.2, **Kronsugar** is
-KronLSTM R.80 and **Sugarstral** is Timestral-28M R.81. Only the best of each family is
-scored. CITRAS-FM W38.7 is not: on the game windows its MAE was 15.07 mg/dL against W38.2's
+The dashboard uses the model names the paper will use: **SugarOne** is the W5.3 forecast
+ONNX (`GlucoseDao/FORECAST-SugarOne-W5.3-10.7h-mard_loss-mv1-s42`), **SugarOne R.28** is the
+dual-mode arm scored with nothing after the origin, **CitricSugar** is CITRAS-FM W38.2,
+**Kronsugar** is KronLSTM R.80 and **Sugarstral** is Timestral-28M R.81. On the 9 November 2026
+game windows W5.3's person-level MAE was 14.37 mg/dL and R.28's was 21.47 mg/dL, so W5.3 is the
+primary SugarOne. Both arms are scored, and a publish is refused if either is missing.
+CITRAS-FM W38.7 is not scored: on the game windows its MAE was 15.07 mg/dL against W38.2's
 14.97 mg/dL. GluMind is not either: on the joined Loop + AI-READI test set SugarOne 1.0 has
-an MAE of 12.40 mg/dL against GluMind's 12.73. The game has no insulin or carbs, so SugarOne
-sees those channels as zero.
+an MAE of 12.40 mg/dL against GluMind's 12.73. The game has no insulin or carbs, so the
+forecast SugarOne sees those channels as zero.
 
 Person-level MAE (mean of round MAEs) is the analysis unit so repeated rounds
 from the same participant do not inflate degrees of freedom.

@@ -70,19 +70,20 @@ TRACE_CLASSES: dict[str, str] = {
 }
 MIN_CLASS_ROUNDS: int = MIN_GENERIC_SEGMENTS
 MIN_PAIRED_CLASS_ROUNDS: int = 3
-# The names the paper uses: SugarOne is the production SugarOne 1.0 checkpoint,
-# CITRAS-FM W38.2 is CitricSugar, KronLSTM R.80 is Kronsugar and Timestral-28M R.81
-# is Sugarstral.
+# The names the paper uses: SugarOne is the W5.3 forecast ONNX (it beat R.28
+# on these windows), CITRAS-FM W38.2 is CitricSugar, KronLSTM R.80 is Kronsugar
+# and Timestral-28M R.81 is Sugarstral. R.28 stays in the comparison.
 MODEL_LABELS: dict[str, str] = {
     "persistence": "Persistence",
     "linear": "Linear trend",
     "sugar_one": "SugarOne",
+    "sugar_one_r28": "SugarOne R.28",
     "citras_w38_2": "CitricSugar",
     "kronlstm": "Kronsugar",
     "timestral": "Sugarstral",
 }
 TRAINED_MODELS: frozenset[str] = frozenset(
-    {"sugar_one", "citras_w38_2", "kronlstm", "timestral"}
+    {"sugar_one", "sugar_one_r28", "citras_w38_2", "kronlstm", "timestral"}
 )
 MIN_REPLAYED_PLAYERS: int = 30
 

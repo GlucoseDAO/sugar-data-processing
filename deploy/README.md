@@ -69,10 +69,10 @@ checkout:
 - `data/raw/prediction_statistics.csv` and its `archived_*.csv`: the same
   prepared, linked export as OVH's `inputs/` directory, not a raw browser-ID fetch;
 - `../sugar-sugar/data/input/users`: the players' own-data uploads (gitignored);
-- `data/raw/hf_models/`: the CITRAS-FM W38.2, KronLSTM R.80 and Timestral R.81 bundles;
-- `../glucose-forecasting` (or `GLUCOSE_FORECASTING_DIR`): SugarOne 1.0.
+- `data/raw/hf_models/`: the SugarOne W5.3, SugarOne R.28, CITRAS-FM W38.2, KronLSTM R.80 and Timestral R.81 bundles;
+- `../glucose-forecasting` (or `GLUCOSE_FORECASTING_DIR`), optional: the local SugarOne 1.0 checkpoint, used only when the W5.3 bundle is absent.
 
-A build is published only if it scored `sugar_one`, `citras_w38_2`, `kronlstm` and
+A build is published only if it scored `sugar_one` (W5.3), `sugar_one_r28`, `citras_w38_2`, `kronlstm` and
 `timestral` (override with `SDP_REQUIRED_MODELS`) and both pages pass the Node.js
 syntax check. It is uploaded as `releases/<time>-<revision>-laptop` and the `current`
 symlink is switched, as the server does; three releases are kept. `--dry-run` builds

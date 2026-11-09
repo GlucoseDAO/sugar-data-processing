@@ -21,14 +21,14 @@ host="${SDP_HOST:-antonkulaga@ovh}"
 deploy_dir="${SDP_DEPLOY_DIR:-/home/web/ops/sugar-data-processing}"
 ref="${SDP_REF:-origin/main}"
 input_csv="${SDP_INPUT_CSV:-$main_repo/data/raw/prediction_statistics.csv}"
-required_models="${SDP_REQUIRED_MODELS:-sugar_one,citras_w38_2,kronlstm,timestral}"
+required_models="${SDP_REQUIRED_MODELS:-sugar_one,sugar_one_r28,citras_w38_2,kronlstm,timestral}"
 sugar_root="${SDP_SUGAR_SUGAR:-$main_repo/../sugar-sugar}"
 forecasting_root="${GLUCOSE_FORECASTING_DIR:-$main_repo/../glucose-forecasting}"
 preview_dir="${SDP_PREVIEW_DIR:-$main_repo/output/real_preview}"
 node_bin="${SDP_NODE:-node}"
 export SDP_SCORE_CACHE="${SDP_SCORE_CACHE:-$main_repo/data/processed/model_cache/forecasts.parquet}"
 
-for dir in "$sugar_root" "$forecasting_root" "$main_repo/data/raw/hf_models"; do
+for dir in "$sugar_root" "$main_repo/data/raw/hf_models"; do
     if [[ ! -d "$dir" ]]; then
         printf 'Missing %s; the build needs it.\n' "$dir" >&2
         exit 1
@@ -55,7 +55,9 @@ printf 'Building dashboard for %s on this machine.\n' "${revision:0:12}"
 # clean build checkout gets them as neighbours.
 git -C "$main_repo" worktree add --quiet --detach "$tmp/sugar-data-processing" "$revision"
 ln -s -- "$(realpath -- "$sugar_root")" "$tmp/sugar-sugar"
-ln -s -- "$(realpath -- "$forecasting_root")" "$tmp/glucose-forecasting"
+if [[ -d "$forecasting_root" ]]; then
+    ln -s -- "$(realpath -- "$forecasting_root")" "$tmp/glucose-forecasting"
+fi
 ln -s -- "$main_repo/data/raw/hf_models" "$tmp/sugar-data-processing/data/raw/hf_models"
 (
     cd "$tmp/sugar-data-processing"

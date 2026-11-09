@@ -1010,7 +1010,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
             <ul class="howto">
               <li><b>Persistence</b>: assumes glucose stays at its last value.</li>
               <li><b>Linear trend</b>: extends the recent slope.</li>
-              <li><b>CitricSugar / Kronsugar / SugarOne / Sugarstral</b>: GlucoseDAO's trained forecasting models, when scored.</li>
+              <li><b>SugarOne / SugarOne R.28 / CitricSugar / Kronsugar / Sugarstral</b>: GlucoseDAO's trained forecasting models, when scored.</li>
             </ul>
             <p class="note" id="aiGlanceNote"></p>
             <div class="legend-grid" id="aiGlanceModels"></div>
@@ -1273,11 +1273,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       persistence: "rect",
       linear: "rectRot",
       sugar_one: "star",
+      sugar_one_r28: "rectRounded",
       citras_w38_2: "cross",
       kronlstm: "triangle",
       timestral: "crossRot",
     };
-    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "sugar_one", "citras_w38_2", "kronlstm", "kronos", "timestral"];
+    const TRACE_ORDER = ["actual", "human", "persistence", "linear", "sugar_one", "sugar_one_r28", "citras_w38_2", "kronlstm", "kronos", "timestral"];
     const MAX_ROUNDS = 12;
     let personIndex = 0;
     let aiMix = 0.5;
@@ -1700,7 +1701,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
       const comps = ((DATA.h6 || {}).comparisons || []).filter((c) => num(c.model_mean_mae) !== null);
       if (!card || !comps.length) return;
       card.hidden = false;
-      const trained = comps.some((c) => ["sugar_one", "citras_w38_2", "kronlstm", "timestral"].includes(c.model_name));
+      const trained = comps.some((c) => ["sugar_one", "sugar_one_r28", "citras_w38_2", "kronlstm", "timestral"].includes(c.model_name));
       const models = availableModels();
       const classes = [
         { key: "all", label: "All traces", color: "#334155" },
@@ -1963,7 +1964,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 
     function showMissingModel(ids) {
       const note = document.getElementById("missingModel");
-      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.sugar_one || t.models.citras_w38_2 || t.models.kronlstm || t.models.timestral));
+      const haveDeep = (DATA.traces || []).some((t) => t.models && (t.models.sugar_one || t.models.sugar_one_r28 || t.models.citras_w38_2 || t.models.kronlstm || t.models.timestral));
       if (haveDeep || !ids.length) {
         note.hidden = true;
         note.textContent = "";

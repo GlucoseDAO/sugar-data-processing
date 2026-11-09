@@ -154,6 +154,17 @@ TIMESTRAL_HF_REPO: str = (
     "GlucoseDao/WHAT_IF_FORECAST-Timestral_28M-R.81-2h-announced_meals-physio_consistency"
 )
 TIMESTRAL_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "timestral_r81"
+# SugarOne W5.3, a 128-step forecast ONNX. It replaces the local SugarOne 1.0
+# checkpoint when this bundle is on disk or downloadable.
+SUGAR_ONE_W53_HF_REPO: str = "GlucoseDao/FORECAST-SugarOne-W5.3-10.7h-mard_loss-mv1-s42"
+SUGAR_ONE_W53_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "sugar_one_w53"
+# Dual-mode SugarOne R.28 (72h past, 4h gap, 4h post). Scored in forward mode
+# on the same game windows so it can be compared with W5.3; only the better
+# arm is kept in the published analysis.
+SUGAR_ONE_R28_HF_REPO: str = (
+    "GlucoseDao/DUAL_MODE-SugarOne-R.28-72h_past-4h_post-jointmask-carbgrams-threesource-s42"
+)
+SUGAR_ONE_R28_CACHE_DIR: Path = REPO_ROOT / "data" / "raw" / "hf_models" / "sugar_one_r28"
 CITRAS_PAST_STEPS: int = 1440
 CITRAS_GAP_STEPS: int = 48
 CITRAS_POST_STEPS: int = 1392

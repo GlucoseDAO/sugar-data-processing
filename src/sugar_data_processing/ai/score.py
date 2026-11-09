@@ -8,11 +8,20 @@ import numpy as np
 import polars as pl
 from eliot import start_action
 
-from sugar_data_processing.ai import citras, kronlstm, timestral
+from sugar_data_processing.ai import citras, kronlstm, sugar_one_forecast, sugar_one_inpaint, timestral
 from sugar_data_processing.ai.cache import ForecastCache, Forecasts, bundle_fingerprint, files_fingerprint
 from sugar_data_processing.ai.citras import ensure_citras_bundle, score_citras_windows
 from sugar_data_processing.ai.convert import pad_context, write_ml_ready_csv
 from sugar_data_processing.ai.kronlstm import KRONLSTM_MODEL_NAME, ensure_kronlstm_bundle, score_kronlstm_windows
+from sugar_data_processing.ai.sugar_one_forecast import (
+    ensure_sugar_one_w53_bundle,
+    score_sugar_one_w53_windows,
+)
+from sugar_data_processing.ai.sugar_one_inpaint import (
+    SUGAR_ONE_R28_NAME,
+    ensure_sugar_one_r28_bundle,
+    score_sugar_one_r28_windows,
+)
 from sugar_data_processing.ai.timestral import TIMESTRAL_MODEL_NAME, ensure_timestral_bundle, score_timestral_windows
 from sugar_data_processing.ai.windows import PlayedWindow
 from sugar_data_processing.config import (
@@ -29,6 +38,7 @@ from sugar_data_processing.config import (
 MODEL_PERSISTENCE: str = "persistence"
 MODEL_LINEAR: str = "linear"
 MODEL_SUGAR_ONE: str = "sugar_one"
+MODEL_SUGAR_ONE_R28: str = SUGAR_ONE_R28_NAME
 SUGAR_ONE_CHANNELS: tuple[str, ...] = ("glucose", "basal", "bolus", "carbs")
 MODEL_CITRAS_W38_2: str = "citras_w38_2"
 MODEL_KRONLSTM: str = KRONLSTM_MODEL_NAME
@@ -45,9 +55,10 @@ def score_windows(
     """Return ingest-ready predictions for every window and every available model.
 
     Always scores ``persistence`` (last visible value) and ``linear``
-    (slope of the last six visible points). ``sugar_one`` (the production
-    SugarOne 1.0 checkpoint) is added when a sibling glucose-forecasting
-    checkout has it.
+    (slope of the last six visible points). ``sugar_one`` is SugarOne W5.3
+    when that ONNX bundle is on disk or downloadable with ``HF_TOKEN``, and
+    otherwise the local SugarOne 1.0 checkpoint. ``sugar_one_r28`` is the
+    dual-mode R.28 arm, scored in forward mode on the same windows.
     ``citras_w38_2`` is added when its dual-mode ONNX bundle is on disk or
     downloadable with ``HF_TOKEN``. ``kronlstm`` (streamed R.80, two ONNX
     graphs) and ``timestral`` (Timestral-28M R.81, one forecast-mode graph)
@@ -61,7 +72,10 @@ def score_windows(
             write_ml_ready_csv(windows, ml_ready_path)
         rows: list[dict[str, object]] = []
         cache = ForecastCache(cache_path)
-        deep = _score_sugar_one_batch(windows, forecasting_root, cache)
+        deep = _score_sugar_one_w53(windows, cache)
+        if not deep:
+            deep = _score_sugar_one_batch(windows, forecasting_root, cache)
+        r28 = _score_sugar_one_r28(windows, cache)
         citras_by_model = _score_citras(windows, cache)
         kronlstm_preds = _score_kronlstm(windows, cache)
         timestral_preds = _score_timestral(windows, cache)
@@ -74,6 +88,8 @@ def score_windows(
             key = (window.study_id, window.run_id, window.round_number)
             if key in deep:
                 preds[MODEL_SUGAR_ONE] = deep[key]
+            if key in r28:
+                preds[MODEL_SUGAR_ONE_R28] = r28[key]
             for model_name, by_key in citras_by_model.items():
                 if key in by_key:
                     preds[model_name] = by_key[key]
@@ -168,6 +184,32 @@ def _score_timestral(windows: list[PlayedWindow], cache: ForecastCache) -> Forec
         bundle_fingerprint(folder, Path(timestral.__file__)),
         windows,
         lambda missing: score_timestral_windows(missing, bundle_dir=folder),
+    )
+
+
+def _score_sugar_one_w53(windows: list[PlayedWindow], cache: ForecastCache) -> Forecasts:
+    """SugarOne W5.3 forecasts, stored under the ``sugar_one`` name."""
+    folder = ensure_sugar_one_w53_bundle() if windows else None
+    if folder is None:
+        return {}
+    return cache.score(
+        MODEL_SUGAR_ONE,
+        bundle_fingerprint(folder, Path(sugar_one_forecast.__file__)),
+        windows,
+        lambda missing: score_sugar_one_w53_windows(missing, bundle_dir=folder),
+    )
+
+
+def _score_sugar_one_r28(windows: list[PlayedWindow], cache: ForecastCache) -> Forecasts:
+    """SugarOne R.28 forward-mode forecasts."""
+    folder = ensure_sugar_one_r28_bundle() if windows else None
+    if folder is None:
+        return {}
+    return cache.score(
+        MODEL_SUGAR_ONE_R28,
+        bundle_fingerprint(folder, Path(sugar_one_inpaint.__file__)),
+        windows,
+        lambda missing: score_sugar_one_r28_windows(missing, bundle_dir=folder),
     )
 
 
